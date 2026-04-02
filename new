@@ -663,6 +663,15 @@ end)
 -- ============================================
 -- UI SYSTEM
 -- ============================================
+
+-- Remove old air.wave GUI if exists (prevents duplicate tabs on re-execute)
+local playerGui = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+for _, gui in pairs(playerGui:GetChildren()) do
+    if gui:IsA("ScreenGui") and gui.Name:find("air.wave") then
+        gui:Destroy()
+    end
+end
+
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Axiiiom/UILIB/refs/heads/main/LIBHE"))()
 local Window = Library:CreateWindow("air.wave", Vector2.new(492, 598), Enum.KeyCode.K)
 
@@ -1116,8 +1125,6 @@ end
 local function stopFarmLoop()
     FarmSettings.IsInGame = false
     stopAutoShoot()
-end
-    print("[" .. title .. "] " .. text)
 end
 
 -- Aimbot Tab
