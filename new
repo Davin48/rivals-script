@@ -1,88 +1,37 @@
 -- air.wave - Premium Rivals Script
--- Auto-Execute System (Infinite Yield Style)
+-- Auto-Execute System (EXACT Infinite Yield Method)
 
 -- ============================================
--- INFINITE YIELD STYLE AUTO-EXECUTE SYSTEM
+-- EXACT INFINITE YIELD AUTO-EXECUTE SYSTEM
 -- ============================================
 
--- Prevent double execution (like IY_LOADED)
-if getgenv().AIRWAVE_LOADED then
-    warn("[air.wave] Already loaded!")
+if getgenv().AIRWAVE_LOADED and not _G.AIRWAVE_DEBUG then
     return
 end
-getgenv().AIRWAVE_LOADED = true
 
-local TeleportService = game:GetService("TeleportService")
+pcall(function() getgenv().AIRWAVE_LOADED = true end)
+if not game:IsLoaded() then game.Loaded:Wait() end
+
 local Players = game:GetService("Players")
 local localPlayer = Players.LocalPlayer
 
--- Try to find queue_on_teleport from various executors (Infinite Yield method)
+-- Get queue_on_teleport (exact IY method)
 local queueteleport = (syn and syn.queue_on_teleport) or 
                       (fluxus and fluxus.queue_on_teleport) or
                       (krnl and krnl.queue_on_teleport) or
                       queue_on_teleport
 
--- Load script content ONCE and store in getgenv (Infinite Yield method)
-if not getgenv().AIRWAVE_SOURCE then
-    local scriptContent = nil
-    
-    -- Try different paths to load the script
-    local paths = {
-        "C:/Users/davin/Desktop/rivals/airwave_combined.txt",
-        "airwave_combined.txt", 
-        "workspace/airwave_combined.txt",
-        "rivals/airwave_combined.txt"
-    }
-    
-    for _, path in ipairs(paths) do
-        local success, result = pcall(function()
-            return readfile(path)
-        end)
-        if success and result and #result > 100 then
-            scriptContent = result
-            print("[air.wave] Loaded script from: " .. path)
-            break
-        end
-    end
-    
-    if scriptContent then
-        getgenv().AIRWAVE_SOURCE = scriptContent
-        print("[air.wave] Script source stored in getgenv().AIRWAVE_SOURCE")
-    else
-        warn("[air.wave] Could not load script source - auto-execute will not work")
-    end
-end
+-- KeepAirwave setting (like KeepInfYield)
+getgenv().KeepAirwave = true
 
--- Create the auto-execute source that uses the stored script
-local autoExecuteSource = [==[
-repeat task.wait() until game:IsLoaded()
-task.wait(2)
-if getgenv().AIRWAVE_SOURCE then
-    local success, err = pcall(function()
-        loadstring(getgenv().AIRWAVE_SOURCE)()
-    end)
-    if success then
-        print("[air.wave] Auto-executed successfully!")
-    else
-        warn("[air.wave] Auto-execute error: " .. tostring(err))
+-- EXACT Infinite Yield teleport method
+local TeleportCheck = false
+localPlayer.OnTeleport:Connect(function(State)
+    if getgenv().KeepAirwave and (not TeleportCheck) and queueteleport then
+        TeleportCheck = true
+        queueteleport("loadstring(game:HttpGet('https://raw.githubusercontent.com/Davin48/rivals-script/refs/heads/main/new'))()")
     end
-else
-    warn("[air.wave] No script source found in getgenv().AIRWAVE_SOURCE")
-end
-]==]
-
--- Detect teleport and queue script for re-execution (Infinite Yield Style)
-if queueteleport and getgenv().AIRWAVE_SOURCE then
-    localPlayer.OnTeleport:Connect(function(State)
-        if State == Enum.TeleportState.Started then
-            pcall(function()
-                queueteleport(autoExecuteSource)
-                print("[air.wave] Queued for re-execution after teleport")
-            end)
-        end
-    end)
-    print("[air.wave] Auto-execute system active - will re-execute on every teleport")
-end
+end)
 
 -- ============================================
 -- PREMIUM ESP SYSTEM (Clean & Lag-Free)
@@ -1186,3 +1135,4 @@ spawn(function()
 end)
 
 notify("air.wave", "Script loaded successfully!")
+
