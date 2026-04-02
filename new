@@ -661,6 +661,213 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- ============================================
+-- UI SYSTEM
+-- ============================================
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Axiiiom/UILIB/refs/heads/main/LIBHE"))()
+local Window = Library:CreateWindow("air.wave", Vector2.new(492, 598), Enum.KeyCode.K)
+
+local function notify(title, text)
+    print("[" .. title .. "] " .. text)
+end
+
+-- Aimbot Tab
+local AimbotTab = Window:CreateTab("Aimbot")
+local AimbotSection = AimbotTab:CreateSector("Aimbot", "left")
+
+AimbotSection:AddToggle("Enable Aimbot", false, function(v)
+    Aimbot.Enabled = v
+    notify("Aimbot", v and "ON" or "OFF")
+end)
+
+AimbotSection:AddDropdown("Aim Key", {"E", "Q", "F", "RightMouseButton"}, "E", false, function(v)
+    Aimbot.KeyName = v
+    if v ~= "RightMouseButton" then
+        Aimbot.Key = Enum.KeyCode[v]
+    end
+end)
+
+AimbotSection:AddDropdown("Aim Part", {"Head", "HumanoidRootPart", "Torso"}, "Head", false, function(v)
+    Aimbot.AimPart = v
+end)
+
+AimbotSection:AddSlider("Smoothness", 1, 2, 10, 0.5, function(v)
+    Aimbot.Smoothness = v
+end)
+
+-- Silent Aim
+local SilentSection = AimbotTab:CreateSector("Silent Aim", "right")
+
+SilentSection:AddToggle("Enable Silent Aim", false, function(v)
+    silentAimEnabled = v
+    notify("Silent Aim", v and "ON" or "OFF")
+end)
+
+SilentSection:AddDropdown("Silent Aim Key", silentAimKeys, "RightMouseButton", false, function(v)
+    selectedSilentAimKey = v
+end)
+
+-- FOV
+local FovSection = AimbotTab:CreateSector("FOV", "right")
+
+FovSection:AddToggle("Show FOV", false, function(v)
+    FOV.Enabled = v
+end)
+
+FovSection:AddSlider("FOV Size", 50, 150, 500, 10, function(v)
+    FOV.Size = v
+end)
+
+-- ESP Tab
+local EspTab = Window:CreateTab("ESP")
+local EspMain = EspTab:CreateSector("Main", "left")
+
+EspMain:AddToggle("Enable ESP", false, function(v)
+    ESP.Enabled = v
+end)
+
+EspMain:AddToggle("Box", false, function(v)
+    ESP.Box = v
+end)
+
+EspMain:AddToggle("Filled Box", false, function(v)
+    ESP.BoxFilled = v
+end)
+
+EspMain:AddToggle("Skeleton", false, function(v)
+    ESP.Skeleton = v
+end)
+
+EspMain:AddToggle("Name", false, function(v)
+    ESP.Name = v
+end)
+
+EspMain:AddToggle("Health", false, function(v)
+    ESP.Health = v
+end)
+
+EspMain:AddToggle("Distance", false, function(v)
+    ESP.Distance = v
+end)
+
+EspMain:AddToggle("Tracer", false, function(v)
+    ESP.Tracer = v
+end)
+
+EspMain:AddSlider("Max Distance", 100, 1000, 5000, 100, function(v)
+    ESP.MaxDistance = v
+end)
+
+-- Misc Tab
+local MiscTab = Window:CreateTab("Misc")
+local MiscSection = MiscTab:CreateSector("Features", "left")
+
+-- Fly
+local Fly = {
+    Enabled = false,
+    Speed = 50,
+    Connection = nil,
+    BodyGyro = nil,
+    BodyVelocity = nil,
+}
+
+MiscSection:AddToggle("Fly", false, function(v)
+    Fly.Enabled = v
+    
+    if v then
+        local char = localPlayer.Character
+        if not char then return end
+        local root = char:FindFirstChild("HumanoidRootPart")
+        if not root then return end
+        
+        Fly.BodyGyro = Instance.new("BodyGyro")
+        Fly.BodyGyro.P = 9e4
+        Fly.BodyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+        Fly.BodyGyro.CFrame = root.CFrame
+        Fly.BodyGyro.Parent = root
+        
+        Fly.BodyVelocity = Instance.new("BodyVelocity")
+        Fly.BodyVelocity.Velocity = Vector3.new(0, 0, 0)
+        Fly.BodyVelocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+        Fly.BodyVelocity.Parent = root
+        
+        Fly.Connection = RunService.Heartbeat:Connect(function()
+            if not Fly.Enabled then
+                if Fly.BodyGyro then Fly.BodyGyro:Destroy() end
+                if Fly.BodyVelocity then Fly.BodyVelocity:Destroy() end
+                return
+            end
+            
+            local camCF = camera.CFrame
+            local velocity = Vector3.new(0, 0, 0)
+            
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+                velocity = velocity + camCF.LookVector * Fly.Speed
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+                velocity = velocity - camCF.LookVector * Fly.Speed
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+                velocity = velocity - camCF.RightVector * Fly.Speed
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+                velocity = velocity + camCF.RightVector * Fly.Speed
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+                velocity = velocity + Vector3.new(0, Fly.Speed, 0)
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+                velocity = velocity - Vector3.new(0, Fly.Speed, 0)
+            end
+            
+            if Fly.BodyVelocity then
+                Fly.BodyVelocity.Velocity = velocity
+            end
+            if Fly.BodyGyro then
+                Fly.BodyGyro.CFrame = camCF
+            end
+        end)
+    else
+        if Fly.Connection then Fly.Connection:Disconnect() end
+        if Fly.BodyGyro then Fly.BodyGyro:Destroy() end
+        if Fly.BodyVelocity then Fly.BodyVelocity:Destroy() end
+    end
+end)
+
+-- Server Lag (No Reload)
+local ServerLag = {
+    Enabled = false,
+    Connection = nil,
+}
+
+local function modifyTable(attr, val)
+    for _, gcVal in pairs(getgc(true)) do
+        if type(gcVal) == "table" and rawget(gcVal, attr) then
+            gcVal[attr] = val
+        end
+    end
+end
+
+MiscSection:AddToggle("Server Lag", false, function(v)
+    ServerLag.Enabled = v
+    
+    if v then
+        modifyTable("ShootCooldown", 0)
+        modifyTable("ShootSpread", 0)
+        modifyTable("ShootRecoil", 0)
+        
+        ServerLag.Connection = RunService.Heartbeat:Connect(function()
+            modifyTable("ShootCooldown", 0)
+            modifyTable("ShootSpread", 0)
+            modifyTable("ShootRecoil", 0)
+        end)
+    else
+        if ServerLag.Connection then
+            ServerLag.Connection:Disconnect()
+        end
+    end
+end)
+
+-- ============================================
 -- AFK AUTO FARM TAB
 -- ============================================
 local FarmTab = Window:CreateTab("AFK Farm")
@@ -910,14 +1117,6 @@ local function stopFarmLoop()
     FarmSettings.IsInGame = false
     stopAutoShoot()
 end
-
--- ============================================
--- UI SYSTEM
--- ============================================
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Axiiiom/UILIB/refs/heads/main/LIBHE"))()
-local Window = Library:CreateWindow("air.wave", Vector2.new(492, 598), Enum.KeyCode.K)
-
-local function notify(title, text)
     print("[" .. title .. "] " .. text)
 end
 
@@ -1288,6 +1487,257 @@ MiscSection:AddButton("Unload All", function()
     
     notify("Script", "Unloaded successfully")
 end)
+
+-- ============================================
+-- AFK AUTO FARM TAB
+-- ============================================
+local FarmTab = Window:CreateTab("AFK Farm")
+local FarmSection = FarmTab:CreateSector("Auto 1v1 Wins", "left")
+
+-- Farm Settings
+local FarmSettings = {
+    Enabled = false,
+    Map = "Arena",
+    Weapon = "Assault Rifle",
+    Connection = nil,
+    IsInGame = false,
+    CurrentTarget = nil,
+}
+
+-- Available Maps and Weapons
+local Maps = {"Arena", "Ruins", "Construction", "Desert", "Warehouse", "Shipyard"}
+local Weapons = {"Assault Rifle", "Handgun", "Fists", "Grenade", "Revolver", "Shotgun", "SMG"}
+
+-- UI Elements
+FarmSection:AddToggle("Enable AFK Farm", false, function(v)
+    FarmSettings.Enabled = v
+    if v then
+        notify("AFK Farm", "Auto 1v1 Farm aktiviert", 3)
+        startFarmLoop()
+    else
+        notify("AFK Farm", "Auto 1v1 Farm deaktiviert", 2)
+        stopFarmLoop()
+    end
+end)
+
+FarmSection:AddDropdown("Map", Maps, "Arena", false, function(v)
+    FarmSettings.Map = v
+    notify("AFK Farm", "Map gewählt: " .. v, 2)
+end)
+
+FarmSection:AddDropdown("Weapon", Weapons, "Assault Rifle", false, function(v)
+    FarmSettings.Weapon = v
+    notify("AFK Farm", "Waffe gewählt: " .. v, 2)
+end)
+
+-- FOV 500 Toggle
+FarmSection:AddToggle("FOV 500 (Silent Aim)", false, function(v)
+    if v then
+        FOV.Size = 500
+        FOV.Enabled = true
+        silentAimEnabled = true
+        notify("AFK Farm", "FOV 500 + Silent Aim aktiviert", 2)
+    else
+        FOV.Size = 150
+        FOV.Enabled = false
+        silentAimEnabled = false
+    end
+end)
+
+-- Auto Shoot Toggle
+FarmSection:AddToggle("Auto Shoot", false, function(v)
+    FarmSettings.AutoShoot = v
+    if v then
+        notify("AFK Farm", "Auto Shoot aktiviert", 2)
+        startAutoShoot()
+    else
+        stopAutoShoot()
+    end
+end)
+
+-- Farm Logic
+local function findRuneAndJoin()
+    -- Look for Rune game mode button (1v1)
+    local playerGui = localPlayer:WaitForChild("PlayerGui")
+    local mainGui = playerGui:WaitForChild("MainGui")
+    local mainFrame = mainGui:WaitForChild("MainFrame")
+    local lobby = mainFrame:WaitForChild("Lobby")
+    
+    -- Find Rune button
+    local runeButton = nil
+    for _, child in pairs(lobby:GetDescendants()) do
+        if child:IsA("TextButton") or child:IsA("ImageButton") then
+            if child.Name:lower():find("rune") or (child.Text and child.Text:lower():find("rune")) then
+                runeButton = child
+                break
+            end
+        end
+    end
+    
+    if runeButton then
+        -- Click Rune button
+        pcall(function()
+            runeButton:FireServer()
+        end)
+        return true
+    end
+    return false
+end
+
+local function selectMapAndWeapon()
+    -- Wait for map selection UI
+    task.wait(1)
+    local playerGui = localPlayer:WaitForChild("PlayerGui")
+    
+    -- Try to find map selection
+    for _, gui in pairs(playerGui:GetChildren()) do
+        if gui:IsA("ScreenGui") then
+            for _, child in pairs(gui:GetDescendants()) do
+                if child:IsA("TextButton") then
+                    -- Check for map name in button
+                    if child.Text == FarmSettings.Map then
+                        pcall(function()
+                            firesignal(child.MouseButton1Click)
+                        end)
+                        break
+                    end
+                end
+            end
+        end
+    end
+    
+    -- Wait for weapon selection
+    task.wait(1)
+    for _, gui in pairs(playerGui:GetChildren()) do
+        if gui:IsA("ScreenGui") then
+            for _, child in pairs(gui:GetDescendants()) do
+                if child:IsA("TextButton") then
+                    if child.Text == FarmSettings.Weapon then
+                        pcall(function()
+                            firesignal(child.MouseButton1Click)
+                        end)
+                        break
+                    end
+                end
+            end
+        end
+    end
+end
+
+local function getClosestEnemy()
+    local closest = nil
+    local shortestDistance = math.huge
+    local myRoot = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+    
+    if not myRoot then return nil end
+    
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= localPlayer and player.Character then
+            local root = player.Character:FindFirstChild("HumanoidRootPart")
+            local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+            
+            if root and humanoid and humanoid.Health > 0 then
+                local distance = (root.Position - myRoot.Position).Magnitude
+                if distance < shortestDistance then
+                    shortestDistance = distance
+                    closest = player
+                end
+            end
+        end
+    end
+    
+    return closest
+end
+
+local function teleportToEnemy()
+    local enemy = getClosestEnemy()
+    if not enemy or not enemy.Character then return end
+    
+    local enemyRoot = enemy.Character:FindFirstChild("HumanoidRootPart")
+    local myRoot = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+    
+    if enemyRoot and myRoot then
+        -- Teleport behind enemy
+        local behindPos = enemyRoot.CFrame.Position - (enemyRoot.CFrame.LookVector * 8) + Vector3.new(0, 5, 0)
+        myRoot.CFrame = CFrame.new(behindPos, enemyRoot.CFrame.Position)
+    end
+end
+
+-- Auto Shoot Loop
+local autoShootConnection = nil
+local function startAutoShoot()
+    if autoShootConnection then autoShootConnection:Disconnect() end
+    
+    autoShootConnection = RunService.Heartbeat:Connect(function()
+        if not FarmSettings.AutoShoot then return end
+        if not FarmSettings.IsInGame then return end
+        
+        -- Use silent aim to shoot
+        local enemy = getClosestEnemy()
+        if enemy and enemy.Character then
+            local head = enemy.Character:FindFirstChild("Head")
+            if head then
+                -- Lock camera to head
+                local headPos = camera:WorldToViewportPoint(head.Position)
+                if headPos.Z > 0 then
+                    -- Simulate mouse click for shooting
+                    pcall(function()
+                        mouse1click()
+                    end)
+                end
+            end
+        end
+    end)
+end
+
+local function stopAutoShoot()
+    if autoShootConnection then
+        autoShootConnection:Disconnect()
+        autoShootConnection = nil
+    end
+end
+
+-- Main Farm Loop
+local farmConnection = nil
+local function startFarmLoop()
+    if farmConnection then farmConnection:Disconnect() end
+    
+    spawn(function()
+        while FarmSettings.Enabled do
+            task.wait(2)
+            
+            if not FarmSettings.IsInGame then
+                -- Try to join 1v1
+                local success = findRuneAndJoin()
+                if success then
+                    task.wait(2)
+                    selectMapAndWeapon()
+                    FarmSettings.IsInGame = true
+                    notify("AFK Farm", "1v1 gestartet!", 3)
+                end
+            else
+                -- In game - teleport to enemy and shoot
+                teleportToEnemy()
+                
+                -- Check if round ended
+                local playerGui = localPlayer:WaitForChild("PlayerGui")
+                local mainGui = playerGui:WaitForChild("MainGui")
+                local mainFrame = mainGui:WaitForChild("MainFrame")
+                
+                -- Check if we're back in lobby (round ended)
+                if mainFrame:FindFirstChild("Lobby") and mainFrame.Lobby.Visible then
+                    FarmSettings.IsInGame = false
+                    notify("AFK Farm", "Runde vorbei - Suche neue Runde...", 2)
+                end
+            end
+        end
+    end)
+end
+
+local function stopFarmLoop()
+    FarmSettings.IsInGame = false
+    stopAutoShoot()
+end
 
 -- Status Bar (erstellt direkt in PlayerGui falls Menü nicht gefunden)
 spawn(function()
