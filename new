@@ -1046,72 +1046,111 @@ FarmSection:AddToggle("Enable AFK Farm", false, function(v)
     FarmSettings.Enabled = v
     if v then
         notify("AFK Farm", "Auto 1v1 Farm aktiviert", 3)
-        -- Start autofarm.txt logic
+        
+        -- Queue/Map/Waffen Loop (läuft immer)
         spawn(function()
             while FarmSettings.Enabled do
-                local args = {[1] = "1v1"}
-                ReplicatedStorage.Remotes.Matchmaking.JoinQueue:InvokeServer(unpack(args))
-                local args = {[1] = FarmSettings.Map}
-                ReplicatedStorage.Remotes.Duels.VoteMap:FireServer(unpack(args))
-                local args = {[1] = {FarmSettings.Weapon, "Handgun", "Fists", "Grenade"}}
-                ReplicatedStorage.Remotes.Replication.Fighter.PickWeapons:FireServer(unpack(args))
+                -- 1v1 Queue joinen
+                pcall(function()
+                    ReplicatedStorage.Remotes.Matchmaking.JoinQueue:InvokeServer("1v1")
+                end)
+                -- Map voten
+                pcall(function()
+                    ReplicatedStorage.Remotes.Duels.VoteMap:FireServer(FarmSettings.Map)
+                end)
+                -- Waffen auswählen
+                pcall(function()
+                    ReplicatedStorage.Remotes.Replication.Fighter.PickWeapons:FireServer({FarmSettings.Weapon, "Handgun", "Fists", "Grenade"})
+                end)
                 wait(1.1)
             end
         end)
-        -- Start auto shoot
+        
+        -- Kampf Loop (nur wenn genau 2 Spieler = 1v1)
         spawn(function()
             while FarmSettings.Enabled do
-                local cam = workspace.CurrentCamera
-                local VIM = game:GetService("VirtualInputManager")
-                VIM:SendMouseButtonEvent(cam.ViewportSize.X/2, cam.ViewportSize.Y/2, 0, true, game, 1)
-                VIM:SendMouseButtonEvent(cam.ViewportSize.X/2, cam.ViewportSize.Y/2, 0, false, game, 1)
-                wait(0.09)
-            end
-        end)
-        -- Start circle TP around enemy
-        spawn(function()
-            while FarmSettings.Enabled do
-                local target = nil
-                local minDist = math.huge
-                for _, p in pairs(Players:GetPlayers()) do
-                    if p ~= localPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                        local dist = (localPlayer.Character.HumanoidRootPart.Position - p.Character.HumanoidRootPart.Position).magnitude
-                        if dist < minDist then
-                            minDist = dist
+                -- Prüfe ob 1v1 (genau 2 Spieler)
+                if #Players:GetPlayers() == 2 then
+                    -- Finde Gegner
+                    local target = nil
+                    for _, p in pairs(Players:GetPlayers()) do
+                        if p ~= localPlayer then
                             target = p
+                            break
                         end
                     end
-                end
-                if target and target.Character and target.Character:FindFirstChild("Humanoid") and target.Character.Humanoid.Health > 0 then
-                    -- Circle around enemy
-                    for angle = 0, math.pi * 2, 0.1 do
-                        local x = math.cos(angle) * 6
-                        local z = math.sin(angle) * 6
-                        local y = target.Character.HumanoidRootPart.Position.Y + 8
-                        localPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(target.Character.HumanoidRootPart.Position + Vector3.new(x, y - target.Character.HumanoidRootPart.Position.Y, z), target.Character.HumanoidRootPart.Position)
-                        RunService.RenderStepped:Wait()
-                    end
-                end
-            end
-        end)
-        -- Camera lock to enemy
-        spawn(function()
-            while FarmSettings.Enabled do
-                local target = nil
-                local minDist = math.huge
-                for _, p in pairs(Players:GetPlayers()) do
-                    if p ~= localPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                        local dist = (localPlayer.Character.HumanoidRootPart.Position - p.Character.HumanoidRootPart.Position).magnitude
-                        if dist < minDist then
-                            minDist = dist
-                            target = p
+                    
+                    -- Warte bis Gegner existiert und lebt
+                    if target and target.Character and target.Character:FindFirstChild("Humanoid") and target.Character.Humanoid.Health > 0 then
+                        -- Warte bis wir selbst respawned sind (falls wir tot waren)
+                        while FarmSettings.Enabled and (not localPlayer.Character or not localPlayer.Character:FindFirstChild("Humanoid") or localPlayer.Character.Humanoid.Health <= 0) do
+                            wait(0.5)
                         end
+                        
+                        -- Kampf Logik für diesen Gegner
+                        local stopCombat = false
+                        
+                        -- Camera Lock
+                        spawn(function()
+                            while not stopCombat and FarmSettings.Enabled do
+                                if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+                                    camera.CFrame = CFrame.new(camera.CFrame.Position, target.Character.HumanoidRootPart.Position)
+                                end
+                                RunService.RenderStepped:Wait()
+                            end
+                        end)
+                        
+                        -- Circle TP
+                        spawn(function()
+                            while not stopCombat and FarmSettings.Enabled do
+                                if target and target.Character and target.Character:FindFirstChild("Humanoid") and target.Character.Humanoid.Health > 0 then
+                                    if not localPlayer.Character or not localPlayer.Character:FindFirstChild("Humanoid") or localPlayer.Character.Humanoid.Health <= 0 then
+                                        wait(1)
+                                        continue
+                                    end
+                                    for angle = 0, math.pi * 2, 0.1 do
+                                        if not target or not target.Character then break end
+                                        if not localPlayer.Character or not localPlayer.Character:FindFirstChild("HumanoidRootPart") then break end
+                                        local hrp = target.Character:FindFirstChild("HumanoidRootPart")
+                                        if not hrp then break end
+                                        local x = math.cos(angle) * 6
+                                        local z = math.sin(angle) * 6
+                                        local y = hrp.Position.Y + 8
+                                        localPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(hrp.Position + Vector3.new(x, y - hrp.Position.Y, z), hrp.Position)
+                                        RunService.RenderStepped:Wait()
+                                    end
+                                else
+                                    break
+                                end
+                            end
+                        end)
+                        
+                        -- Auto Shoot
+                        spawn(function()
+                            local VIM = game:GetService("VirtualInputManager")
+                            while not stopCombat and FarmSettings.Enabled do
+                                if target and target.Character and target.Character:FindFirstChild("Humanoid") and target.Character.Humanoid.Health > 0 then
+                                    if localPlayer.Character and localPlayer.Character:FindFirstChild("Humanoid") and localPlayer.Character.Humanoid.Health > 0 then
+                                        VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 0, true, game, 1)
+                                        VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 0, false, game, 1)
+                                    end
+                                else
+                                    break
+                                end
+                                wait(0.09)
+                            end
+                        end)
+                        
+                        -- Warte bis Gegner tot oder nicht mehr da
+                        while FarmSettings.Enabled and target and target.Character and target.Character:FindFirstChild("Humanoid") and target.Character.Humanoid.Health > 0 do
+                            wait(0.5)
+                        end
+                        
+                        stopCombat = true
+                        wait(2)
                     end
                 end
-                if target and target.Character and target.Character:FindFirstChild("Humanoid") and target.Character.Humanoid.Health > 0 then
-                    workspace.CurrentCamera.CFrame = CFrame.new(workspace.CurrentCamera.CFrame.Position, target.Character.HumanoidRootPart.Position)
-                end
-                RunService.RenderStepped:Wait()
+                wait(0.5)
             end
         end)
     else
