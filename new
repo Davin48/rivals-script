@@ -1047,15 +1047,24 @@ FarmSection:AddToggle("Enable AFK Farm", false, function(v)
     if v then
         notify("AFK Farm", "Auto 1v1 Farm aktiviert", 3)
         
+        -- Get ReplicatedStorage service
+        local ReplicatedStorage = game:GetService("ReplicatedStorage")
+        
         -- Queue/Map/Weapons loop (always running)
         spawn(function()
             while FarmSettings.Enabled do
-                local args = {[1] = "1v1"}
-                ReplicatedStorage.Remotes.Matchmaking.JoinQueue:InvokeServer(unpack(args))
-                local args = {[1] = FarmSettings.Map}
-                ReplicatedStorage.Remotes.Duels.VoteMap:FireServer(unpack(args))
-                local args = {[1] = {FarmSettings.Weapon, "Handgun", "Fists", "Grenade"}}
-                ReplicatedStorage.Remotes.Replication.Fighter.PickWeapons:FireServer(unpack(args))
+                pcall(function()
+                    local args = {[1] = "1v1"}
+                    ReplicatedStorage.Remotes.Matchmaking.JoinQueue:InvokeServer(unpack(args))
+                end)
+                pcall(function()
+                    local args = {[1] = FarmSettings.Map}
+                    ReplicatedStorage.Remotes.Duels.VoteMap:FireServer(unpack(args))
+                end)
+                pcall(function()
+                    local args = {[1] = {FarmSettings.Weapon, "Handgun", "Fists", "Grenade"}}
+                    ReplicatedStorage.Remotes.Replication.Fighter.PickWeapons:FireServer(unpack(args))
+                end)
                 wait(1.1)
             end
         end)
