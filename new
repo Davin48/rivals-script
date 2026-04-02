@@ -1017,7 +1017,7 @@ end)
 MiscSection:AddButton("Rejoin Server", function()
     notify("Rejoin", "Rejoining...")
     pcall(function()
-        TeleportService:Teleport(game.PlaceId, localPlayer)
+        TeleportService:Teleport(17625359962, localPlayer)
     end)
 end)
 
@@ -1041,116 +1041,115 @@ local FarmSettings = {
 local Maps = {"Arena", "Ruins", "Construction", "Desert", "Warehouse", "Shipyard"}
 local Weapons = {"Assault Rifle", "Handgun", "Fists", "Grenade", "Revolver", "Shotgun", "SMG"}
 
--- UI Elements
+-- UI Elements (Exact autofarm.txt - decoded)
 FarmSection:AddToggle("Enable AFK Farm", false, function(v)
     FarmSettings.Enabled = v
     if v then
         notify("AFK Farm", "Auto 1v1 Farm aktiviert", 3)
         
-        -- Queue/Map/Waffen Loop (läuft immer)
+        -- Queue/Map/Weapons loop (always running)
         spawn(function()
             while FarmSettings.Enabled do
-                -- 1v1 Queue joinen
-                pcall(function()
-                    ReplicatedStorage.Remotes.Matchmaking.JoinQueue:InvokeServer("1v1")
-                end)
-                -- Map voten
-                pcall(function()
-                    ReplicatedStorage.Remotes.Duels.VoteMap:FireServer(FarmSettings.Map)
-                end)
-                -- Waffen auswählen
-                pcall(function()
-                    ReplicatedStorage.Remotes.Replication.Fighter.PickWeapons:FireServer({FarmSettings.Weapon, "Handgun", "Fists", "Grenade"})
-                end)
+                local args = {[1] = "1v1"}
+                ReplicatedStorage.Remotes.Matchmaking.JoinQueue:InvokeServer(unpack(args))
+                local args = {[1] = FarmSettings.Map}
+                ReplicatedStorage.Remotes.Duels.VoteMap:FireServer(unpack(args))
+                local args = {[1] = {FarmSettings.Weapon, "Handgun", "Fists", "Grenade"}}
+                ReplicatedStorage.Remotes.Replication.Fighter.PickWeapons:FireServer(unpack(args))
                 wait(1.1)
             end
         end)
         
-        -- Kampf Loop (nur wenn genau 2 Spieler = 1v1)
+        -- Main farm loop (like _0x41)
         spawn(function()
             while FarmSettings.Enabled do
-                -- Prüfe ob 1v1 (genau 2 Spieler)
                 if #Players:GetPlayers() == 2 then
-                    -- Finde Gegner
-                    local target = nil
-                    for _, p in pairs(Players:GetPlayers()) do
-                        if p ~= localPlayer then
-                            target = p
-                            break
+                    -- Combat function (like _0x27)
+                    local function combatLoop()
+                        -- Get closest enemy (like _0x28)
+                        local function getClosest()
+                            local closest = nil
+                            local minDist = math.huge
+                            for _, p in pairs(Players:GetPlayers()) do
+                                if p ~= localPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                                    local dist = (localPlayer.Character.HumanoidRootPart.Position - p.Character.HumanoidRootPart.Position).magnitude
+                                    if dist < minDist then
+                                        minDist = dist
+                                        closest = p
+                                    end
+                                end
+                            end
+                            return closest
+                        end
+                        
+                        -- Camera lock (like _0x2D)
+                        local function camLock(target)
+                            while target and target.Character and target.Character:FindFirstChild("Humanoid") and target.Character.Humanoid.Health > 0 do
+                                camera.CFrame = CFrame.new(camera.CFrame.Position, target.Character.HumanoidRootPart.Position)
+                                RunService.RenderStepped:Wait()
+                            end
+                        end
+                        
+                        -- Circle TP (like _0x2F)
+                        local function circleTP(target)
+                            local radius = 6
+                            local height = 8
+                            local step = 0.1
+                            while target and target.Character and target.Character:FindFirstChild("Humanoid") and target.Character.Humanoid.Health > 0 do
+                                for angle = 0, math.pi * 2, step do
+                                    local x = math.cos(angle) * radius
+                                    local z = math.sin(angle) * radius
+                                    local y = target.Character.HumanoidRootPart.Position.Y + height
+                                    if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                                        localPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(target.Character.HumanoidRootPart.Position + Vector3.new(x, y - target.Character.HumanoidRootPart.Position.Y, z), target.Character.HumanoidRootPart.Position)
+                                    end
+                                    RunService.RenderStepped:Wait()
+                                end
+                            end
+                        end
+                        
+                        -- Auto shoot (like _0x38)
+                        local function autoShoot()
+                            local active = true
+                            spawn(function()
+                                while active do
+                                    for _, p in pairs(Players:GetPlayers()) do
+                                        if p ~= localPlayer and p.Character and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
+                                            local VIM = game:GetService("VirtualInputManager")
+                                            VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 0, true, game, 1)
+                                            VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 0, false, game, 1)
+                                        end
+                                    end
+                                    wait(0.09)
+                                end
+                            end)
+                            return function() active = false end
+                        end
+                        
+                        -- Try 5 times (like _0x3D loop)
+                        for i = 1, 5 do
+                            local target = getClosest()
+                            if target and target.Character and target.Character:FindFirstChild("Humanoid") then
+                                spawn(function() camLock(target) end)
+                                spawn(function() circleTP(target) end)
+                                wait(3)
+                                local stopShoot = autoShoot()
+                                -- Wait for death and restart
+                                target.Character.Humanoid.Died:Connect(function()
+                                    stopShoot()
+                                    wait(5)
+                                    if FarmSettings.Enabled then
+                                        combatLoop() -- Recursive restart like autofarm.txt
+                                    end
+                                end)
+                                return
+                            end
                         end
                     end
                     
-                    -- Warte bis Gegner existiert und lebt
-                    if target and target.Character and target.Character:FindFirstChild("Humanoid") and target.Character.Humanoid.Health > 0 then
-                        -- Warte bis wir selbst respawned sind (falls wir tot waren)
-                        while FarmSettings.Enabled and (not localPlayer.Character or not localPlayer.Character:FindFirstChild("Humanoid") or localPlayer.Character.Humanoid.Health <= 0) do
-                            wait(0.5)
-                        end
-                        
-                        -- Kampf Logik für diesen Gegner
-                        local stopCombat = false
-                        
-                        -- Camera Lock
-                        spawn(function()
-                            while not stopCombat and FarmSettings.Enabled do
-                                if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-                                    camera.CFrame = CFrame.new(camera.CFrame.Position, target.Character.HumanoidRootPart.Position)
-                                end
-                                RunService.RenderStepped:Wait()
-                            end
-                        end)
-                        
-                        -- Circle TP
-                        spawn(function()
-                            while not stopCombat and FarmSettings.Enabled do
-                                if target and target.Character and target.Character:FindFirstChild("Humanoid") and target.Character.Humanoid.Health > 0 then
-                                    if not localPlayer.Character or not localPlayer.Character:FindFirstChild("Humanoid") or localPlayer.Character.Humanoid.Health <= 0 then
-                                        wait(1)
-                                        continue
-                                    end
-                                    for angle = 0, math.pi * 2, 0.1 do
-                                        if not target or not target.Character then break end
-                                        if not localPlayer.Character or not localPlayer.Character:FindFirstChild("HumanoidRootPart") then break end
-                                        local hrp = target.Character:FindFirstChild("HumanoidRootPart")
-                                        if not hrp then break end
-                                        local x = math.cos(angle) * 6
-                                        local z = math.sin(angle) * 6
-                                        local y = hrp.Position.Y + 8
-                                        localPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(hrp.Position + Vector3.new(x, y - hrp.Position.Y, z), hrp.Position)
-                                        RunService.RenderStepped:Wait()
-                                    end
-                                else
-                                    break
-                                end
-                            end
-                        end)
-                        
-                        -- Auto Shoot
-                        spawn(function()
-                            local VIM = game:GetService("VirtualInputManager")
-                            while not stopCombat and FarmSettings.Enabled do
-                                if target and target.Character and target.Character:FindFirstChild("Humanoid") and target.Character.Humanoid.Health > 0 then
-                                    if localPlayer.Character and localPlayer.Character:FindFirstChild("Humanoid") and localPlayer.Character.Humanoid.Health > 0 then
-                                        VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 0, true, game, 1)
-                                        VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 0, false, game, 1)
-                                    end
-                                else
-                                    break
-                                end
-                                wait(0.09)
-                            end
-                        end)
-                        
-                        -- Warte bis Gegner tot oder nicht mehr da
-                        while FarmSettings.Enabled and target and target.Character and target.Character:FindFirstChild("Humanoid") and target.Character.Humanoid.Health > 0 do
-                            wait(0.5)
-                        end
-                        
-                        stopCombat = true
-                        wait(2)
-                    end
+                    combatLoop()
                 end
-                wait(0.5)
+                wait(1)
             end
         end)
     else
@@ -1376,103 +1375,5 @@ local function stopFarmLoop()
     FarmSettings.IsInGame = false
     stopAutoShoot()
 end
-
--- ============================================
--- STATUS BAR
--- ============================================
-spawn(function()
-    task.wait(3)
-    
-    local playerGui = localPlayer:WaitForChild("PlayerGui")
-    local menuGui = nil
-    local mainFrame = nil
-    
-    -- Versuche das Orion Menü zu finden
-    for _, gui in pairs(playerGui:GetChildren()) do
-        if gui:IsA("ScreenGui") then
-            local main = gui:FindFirstChild("Main")
-            if main and main:FindFirstChild("TopBar") then
-                menuGui = gui
-                mainFrame = main
-                break
-            end
-        end
-    end
-    
-    -- Fallback: Erstelle eigenen ScreenGui
-    if not mainFrame then
-        local statusGui = Instance.new("ScreenGui")
-        statusGui.Name = "AirwaveStatusGui"
-        statusGui.Parent = playerGui
-        statusGui.ResetOnSpawn = false
-        
-        mainFrame = Instance.new("Frame")
-        mainFrame.Name = "StatusContainer"
-        mainFrame.Size = UDim2.new(0, 200, 0, 30)
-        mainFrame.Position = UDim2.new(0, 10, 0.9, 0)
-        mainFrame.BackgroundTransparency = 1
-        mainFrame.Parent = statusGui
-    end
-    
-    local status = Instance.new("Frame")
-    status.Name = "AirwaveStatus"
-    status.Size = UDim2.new(0, 200, 0, 30)
-    status.Position = UDim2.new(0, 5, 0, 0)
-    status.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    status.BorderSizePixel = 0
-    status.BackgroundTransparency = 0.2
-    status.Parent = mainFrame
-    
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 6)
-    corner.Parent = status
-    
-    local avatar = Instance.new("ImageLabel")
-    avatar.Name = "Avatar"
-    avatar.Size = UDim2.new(0, 24, 0, 24)
-    avatar.Position = UDim2.new(0, 3, 0.5, -12)
-    avatar.BackgroundTransparency = 1
-    avatar.Image = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. localPlayer.UserId .. "&width=420&height=420&format=png"
-    avatar.Parent = status
-    
-    local avatarCorner = Instance.new("UICorner")
-    avatarCorner.CornerRadius = UDim.new(0, 12)
-    avatarCorner.Parent = avatar
-    
-    local nameLabel = Instance.new("TextLabel")
-    nameLabel.Size = UDim2.new(0, 80, 0, 15)
-    nameLabel.Position = UDim2.new(0, 30, 0, 2)
-    nameLabel.BackgroundTransparency = 1
-    nameLabel.Text = localPlayer.Name
-    nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    nameLabel.TextSize = 10
-    nameLabel.Font = Enum.Font.GothamBold
-    nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-    nameLabel.Parent = status
-    
-    local fpsLabel = Instance.new("TextLabel")
-    fpsLabel.Size = UDim2.new(0, 80, 0, 30)
-    fpsLabel.Position = UDim2.new(1, -85, 0, 0)
-    fpsLabel.BackgroundTransparency = 1
-    fpsLabel.Text = "FPS: 60"
-    fpsLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
-    fpsLabel.TextSize = 10
-    fpsLabel.Font = Enum.Font.GothamBold
-    fpsLabel.TextXAlignment = Enum.TextXAlignment.Right
-    fpsLabel.Parent = status
-    
-    -- FPS Counter
-    local fps = 0
-    local last = tick()
-    RunService.RenderStepped:Connect(function()
-        fps = fps + 1
-        local now = tick()
-        if now - last >= 1 then
-            fpsLabel.Text = "FPS: " .. fps
-            fps = 0
-            last = now
-        end
-    end)
-end)
 
 notify("air.wave", "Script loaded successfully!")
