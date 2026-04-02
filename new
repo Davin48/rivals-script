@@ -1041,11 +1041,17 @@ local FarmSettings = {
 local Maps = {"Arena", "Ruins", "Construction", "Desert", "Warehouse", "Shipyard"}
 local Weapons = {"Assault Rifle", "Handgun", "Fists", "Grenade", "Revolver", "Shotgun", "SMG"}
 
--- UI Elements (Exact autofarm.txt - decoded)
+-- UI Elements (Fixed AFK Farm with Silent Aim)
 FarmSection:AddToggle("Enable AFK Farm", false, function(v)
     FarmSettings.Enabled = v
     if v then
         notify("AFK Farm", "Auto 1v1 Farm aktiviert", 3)
+        
+        -- AUTO-ENABLE SETTINGS
+        FOV.Size = 500
+        FOV.Enabled = true
+        silentAimEnabled = true
+        notify("AFK Farm", "FOV 500 + Silent Aim aktiviert", 2)
         
         -- Get ReplicatedStorage service
         local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -1069,96 +1075,84 @@ FarmSection:AddToggle("Enable AFK Farm", false, function(v)
             end
         end)
         
-        -- Main farm loop (like _0x41)
+        -- Main combat loop with respawn handling
         spawn(function()
             while FarmSettings.Enabled do
+                -- Only fight when exactly 2 players (1v1)
                 if #Players:GetPlayers() == 2 then
-                    -- Combat function (like _0x27)
-                    local function combatLoop()
-                        -- Get closest enemy (like _0x28)
-                        local function getClosest()
-                            local closest = nil
-                            local minDist = math.huge
-                            for _, p in pairs(Players:GetPlayers()) do
-                                if p ~= localPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                                    local dist = (localPlayer.Character.HumanoidRootPart.Position - p.Character.HumanoidRootPart.Position).magnitude
-                                    if dist < minDist then
-                                        minDist = dist
-                                        closest = p
-                                    end
-                                end
-                            end
-                            return closest
-                        end
-                        
-                        -- Camera lock (like _0x2D)
-                        local function camLock(target)
-                            while target and target.Character and target.Character:FindFirstChild("Humanoid") and target.Character.Humanoid.Health > 0 do
-                                camera.CFrame = CFrame.new(camera.CFrame.Position, target.Character.HumanoidRootPart.Position)
-                                RunService.RenderStepped:Wait()
-                            end
-                        end
-                        
-                        -- Circle TP (like _0x2F)
-                        local function circleTP(target)
-                            local radius = 6
-                            local height = 8
-                            local step = 0.1
-                            while target and target.Character and target.Character:FindFirstChild("Humanoid") and target.Character.Humanoid.Health > 0 do
-                                for angle = 0, math.pi * 2, step do
-                                    local x = math.cos(angle) * radius
-                                    local z = math.sin(angle) * radius
-                                    local y = target.Character.HumanoidRootPart.Position.Y + height
-                                    if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                                        localPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(target.Character.HumanoidRootPart.Position + Vector3.new(x, y - target.Character.HumanoidRootPart.Position.Y, z), target.Character.HumanoidRootPart.Position)
-                                    end
-                                    RunService.RenderStepped:Wait()
-                                end
-                            end
-                        end
-                        
-                        -- Auto shoot (like _0x38)
-                        local function autoShoot()
-                            local active = true
-                            spawn(function()
-                                while active do
-                                    for _, p in pairs(Players:GetPlayers()) do
-                                        if p ~= localPlayer and p.Character and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
-                                            local VIM = game:GetService("VirtualInputManager")
-                                            VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 0, true, game, 1)
-                                            VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 0, false, game, 1)
-                                        end
-                                    end
-                                    wait(0.09)
-                                end
-                            end)
-                            return function() active = false end
-                        end
-                        
-                        -- Try 5 times (like _0x3D loop)
-                        for i = 1, 5 do
-                            local target = getClosest()
-                            if target and target.Character and target.Character:FindFirstChild("Humanoid") then
-                                spawn(function() camLock(target) end)
-                                spawn(function() circleTP(target) end)
-                                wait(3)
-                                local stopShoot = autoShoot()
-                                -- Wait for death and restart
-                                target.Character.Humanoid.Died:Connect(function()
-                                    stopShoot()
-                                    wait(5)
-                                    if FarmSettings.Enabled then
-                                        combatLoop() -- Recursive restart like autofarm.txt
-                                    end
-                                end)
-                                return
-                            end
+                    -- Wait for our character to exist and be alive
+                    while FarmSettings.Enabled and (not localPlayer.Character or not localPlayer.Character:FindFirstChild("Humanoid") or localPlayer.Character.Humanoid.Health <= 0) do
+                        wait(0.5)
+                    end
+                    
+                    -- Find enemy
+                    local target = nil
+                    for _, p in pairs(Players:GetPlayers()) do
+                        if p ~= localPlayer then
+                            target = p
+                            break
                         end
                     end
                     
-                    combatLoop()
+                    -- If enemy exists and is alive, start combat
+                    if target and target.Character and target.Character:FindFirstChild("Humanoid") and target.Character.Humanoid.Health > 0 then
+                        local combatActive = true
+                        
+                        -- Circle TP around enemy
+                        spawn(function()
+                            while combatActive and FarmSettings.Enabled do
+                                if not target or not target.Character or not target.Character:FindFirstChild("Humanoid") or target.Character.Humanoid.Health <= 0 then
+                                    break
+                                end
+                                if not localPlayer.Character or not localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                                    wait(0.5)
+                                    continue
+                                end
+                                
+                                local hrp = target.Character.HumanoidRootPart
+                                for angle = 0, math.pi * 2, 0.1 do
+                                    if not target or not target.Character then break end
+                                    if not localPlayer.Character or not localPlayer.Character:FindFirstChild("HumanoidRootPart") then break end
+                                    local x = math.cos(angle) * 6
+                                    local z = math.sin(angle) * 6
+                                    local y = hrp.Position.Y + 8
+                                    localPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(hrp.Position + Vector3.new(x, y - hrp.Position.Y, z), hrp.Position)
+                                    RunService.RenderStepped:Wait()
+                                end
+                            end
+                        end)
+                        
+                        -- Auto shoot (Silent Aim works automatically with FOV 500)
+                        spawn(function()
+                            local VIM = game:GetService("VirtualInputManager")
+                            while combatActive and FarmSettings.Enabled do
+                                if target and target.Character and target.Character:FindFirstChild("Humanoid") and target.Character.Humanoid.Health > 0 then
+                                    if localPlayer.Character and localPlayer.Character:FindFirstChild("Humanoid") and localPlayer.Character.Humanoid.Health > 0 then
+                                        VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 0, true, game, 1)
+                                        VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 0, false, game, 1)
+                                    end
+                                else
+                                    break
+                                end
+                                wait(0.09)
+                            end
+                        end)
+                        
+                        -- Wait for enemy to die OR for us to die
+                        while FarmSettings.Enabled and target and target.Character and target.Character:FindFirstChild("Humanoid") and target.Character.Humanoid.Health > 0 do
+                            -- Check if we died
+                            if not localPlayer.Character or not localPlayer.Character:FindFirstChild("Humanoid") or localPlayer.Character.Humanoid.Health <= 0 then
+                                combatActive = false
+                                break
+                            end
+                            wait(0.3)
+                        end
+                        
+                        combatActive = false
+                        wait(2) -- Short pause before looking for enemy again
+                    end
                 end
-                wait(1)
+                wait(0.5)
             end
         end)
     else
@@ -1386,3 +1380,4 @@ local function stopFarmLoop()
 end
 
 notify("air.wave", "Script loaded successfully!")
+
