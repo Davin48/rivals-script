@@ -661,6 +661,257 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- ============================================
+-- AFK AUTO FARM TAB
+-- ============================================
+local FarmTab = Window:CreateTab("AFK Farm")
+local FarmSection = FarmTab:CreateSector("Auto 1v1 Wins", "left")
+
+-- Farm Settings
+local FarmSettings = {
+    Enabled = false,
+    Map = "Arena",
+    Weapon = "Assault Rifle",
+    Connection = nil,
+    IsInGame = false,
+    CurrentTarget = nil,
+}
+
+-- Available Maps and Weapons
+local Maps = {"Arena", "Ruins", "Construction", "Desert", "Warehouse", "Shipyard"}
+local Weapons = {"Assault Rifle", "Handgun", "Fists", "Grenade", "Revolver", "Shotgun", "SMG"}
+
+-- UI Elements
+FarmSection:AddToggle("Enable AFK Farm", false, function(v)
+    FarmSettings.Enabled = v
+    if v then
+        notify("AFK Farm", "Auto 1v1 Farm aktiviert", 3)
+        startFarmLoop()
+    else
+        notify("AFK Farm", "Auto 1v1 Farm deaktiviert", 2)
+        stopFarmLoop()
+    end
+end)
+
+FarmSection:AddDropdown("Map", Maps, "Arena", false, function(v)
+    FarmSettings.Map = v
+    notify("AFK Farm", "Map gewählt: " .. v, 2)
+end)
+
+FarmSection:AddDropdown("Weapon", Weapons, "Assault Rifle", false, function(v)
+    FarmSettings.Weapon = v
+    notify("AFK Farm", "Waffe gewählt: " .. v, 2)
+end)
+
+-- FOV 500 Toggle
+FarmSection:AddToggle("FOV 500 (Silent Aim)", false, function(v)
+    if v then
+        FOV.Size = 500
+        FOV.Enabled = true
+        silentAimEnabled = true
+        notify("AFK Farm", "FOV 500 + Silent Aim aktiviert", 2)
+    else
+        FOV.Size = 150
+        FOV.Enabled = false
+        silentAimEnabled = false
+    end
+end)
+
+-- Auto Shoot Toggle
+FarmSection:AddToggle("Auto Shoot", false, function(v)
+    FarmSettings.AutoShoot = v
+    if v then
+        notify("AFK Farm", "Auto Shoot aktiviert", 2)
+        startAutoShoot()
+    else
+        stopAutoShoot()
+    end
+end)
+
+-- Farm Logic
+local function findRuneAndJoin()
+    -- Look for Rune game mode button (1v1)
+    local playerGui = localPlayer:WaitForChild("PlayerGui")
+    local mainGui = playerGui:WaitForChild("MainGui")
+    local mainFrame = mainGui:WaitForChild("MainFrame")
+    local lobby = mainFrame:WaitForChild("Lobby")
+    
+    -- Find Rune button
+    local runeButton = nil
+    for _, child in pairs(lobby:GetDescendants()) do
+        if child:IsA("TextButton") or child:IsA("ImageButton") then
+            if child.Name:lower():find("rune") or (child.Text and child.Text:lower():find("rune")) then
+                runeButton = child
+                break
+            end
+        end
+    end
+    
+    if runeButton then
+        -- Click Rune button
+        pcall(function()
+            runeButton:FireServer()
+        end)
+        return true
+    end
+    return false
+end
+
+local function selectMapAndWeapon()
+    -- Wait for map selection UI
+    task.wait(1)
+    local playerGui = localPlayer:WaitForChild("PlayerGui")
+    
+    -- Try to find map selection
+    for _, gui in pairs(playerGui:GetChildren()) do
+        if gui:IsA("ScreenGui") then
+            for _, child in pairs(gui:GetDescendants()) do
+                if child:IsA("TextButton") then
+                    -- Check for map name in button
+                    if child.Text == FarmSettings.Map then
+                        pcall(function()
+                            firesignal(child.MouseButton1Click)
+                        end)
+                        break
+                    end
+                end
+            end
+        end
+    end
+    
+    -- Wait for weapon selection
+    task.wait(1)
+    for _, gui in pairs(playerGui:GetChildren()) do
+        if gui:IsA("ScreenGui") then
+            for _, child in pairs(gui:GetDescendants()) do
+                if child:IsA("TextButton") then
+                    if child.Text == FarmSettings.Weapon then
+                        pcall(function()
+                            firesignal(child.MouseButton1Click)
+                        end)
+                        break
+                    end
+                end
+            end
+        end
+    end
+end
+
+local function getClosestEnemy()
+    local closest = nil
+    local shortestDistance = math.huge
+    local myRoot = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+    
+    if not myRoot then return nil end
+    
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= localPlayer and player.Character then
+            local root = player.Character:FindFirstChild("HumanoidRootPart")
+            local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+            
+            if root and humanoid and humanoid.Health > 0 then
+                local distance = (root.Position - myRoot.Position).Magnitude
+                if distance < shortestDistance then
+                    shortestDistance = distance
+                    closest = player
+                end
+            end
+        end
+    end
+    
+    return closest
+end
+
+local function teleportToEnemy()
+    local enemy = getClosestEnemy()
+    if not enemy or not enemy.Character then return end
+    
+    local enemyRoot = enemy.Character:FindFirstChild("HumanoidRootPart")
+    local myRoot = localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart")
+    
+    if enemyRoot and myRoot then
+        -- Teleport behind enemy
+        local behindPos = enemyRoot.CFrame.Position - (enemyRoot.CFrame.LookVector * 8) + Vector3.new(0, 5, 0)
+        myRoot.CFrame = CFrame.new(behindPos, enemyRoot.CFrame.Position)
+    end
+end
+
+-- Auto Shoot Loop
+local autoShootConnection = nil
+local function startAutoShoot()
+    if autoShootConnection then autoShootConnection:Disconnect() end
+    
+    autoShootConnection = RunService.Heartbeat:Connect(function()
+        if not FarmSettings.AutoShoot then return end
+        if not FarmSettings.IsInGame then return end
+        
+        -- Use silent aim to shoot
+        local enemy = getClosestEnemy()
+        if enemy and enemy.Character then
+            local head = enemy.Character:FindFirstChild("Head")
+            if head then
+                -- Lock camera to head
+                local headPos = camera:WorldToViewportPoint(head.Position)
+                if headPos.Z > 0 then
+                    -- Simulate mouse click for shooting
+                    pcall(function()
+                        mouse1click()
+                    end)
+                end
+            end
+        end
+    end)
+end
+
+local function stopAutoShoot()
+    if autoShootConnection then
+        autoShootConnection:Disconnect()
+        autoShootConnection = nil
+    end
+end
+
+-- Main Farm Loop
+local farmConnection = nil
+local function startFarmLoop()
+    if farmConnection then farmConnection:Disconnect() end
+    
+    spawn(function()
+        while FarmSettings.Enabled do
+            task.wait(2)
+            
+            if not FarmSettings.IsInGame then
+                -- Try to join 1v1
+                local success = findRuneAndJoin()
+                if success then
+                    task.wait(2)
+                    selectMapAndWeapon()
+                    FarmSettings.IsInGame = true
+                    notify("AFK Farm", "1v1 gestartet!", 3)
+                end
+            else
+                -- In game - teleport to enemy and shoot
+                teleportToEnemy()
+                
+                -- Check if round ended
+                local playerGui = localPlayer:WaitForChild("PlayerGui")
+                local mainGui = playerGui:WaitForChild("MainGui")
+                local mainFrame = mainGui:WaitForChild("MainFrame")
+                
+                -- Check if we're back in lobby (round ended)
+                if mainFrame:FindFirstChild("Lobby") and mainFrame.Lobby.Visible then
+                    FarmSettings.IsInGame = false
+                    notify("AFK Farm", "Runde vorbei - Suche neue Runde...", 2)
+                end
+            end
+        end
+    end)
+end
+
+local function stopFarmLoop()
+    FarmSettings.IsInGame = false
+    stopAutoShoot()
+end
+
+-- ============================================
 -- UI SYSTEM
 -- ============================================
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Axiiiom/UILIB/refs/heads/main/LIBHE"))()
