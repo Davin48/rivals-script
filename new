@@ -773,7 +773,7 @@ end
 
 -- Find Fire Remote via GC Scanning
 local function findFireRemote()
-    local FireRemote = nil
+    local foundRemotes = {}
     
     -- Method 1: Direct path
     pcall(function()
@@ -782,24 +782,42 @@ local function findFireRemote()
             if RS.Remotes:FindFirstChild("Replication") then
                 if RS.Remotes.Replication:FindFirstChild("Fighter") then
                     if RS.Remotes.Replication.Fighter:FindFirstChild("Fire") then
-                        FireRemote = RS.Remotes.Replication.Fighter.Fire
+                        table.insert(foundRemotes, RS.Remotes.Replication.Fighter.Fire)
                     end
                 end
             end
         end
     end)
     
-    -- Method 2: GC Scan
-    if not FireRemote then
-        for _, v in pairs(getgc(true)) do
-            if typeof(v) == "table" then
-                for k, val in pairs(v) do
-                    if k == "FireServer" or k == "fireServer" then
-                        -- Check if this is a RemoteEvent
-                        if typeof(val) == "Instance" and val:IsA("RemoteEvent") then
-                            if val.Name:lower():find("fire") or val.Name:lower():find("shoot") then
-                                FireRemote = val
-                                break
+    -- Method 2: Name scanning - collect ALL candidates
+    local RS = game:GetService("ReplicatedStorage")
+    for _, obj in pairs(RS:GetDescendants()) do
+        if obj:IsA("RemoteEvent") or obj:IsA("UnreliableRemoteEvent") then
+            local name = obj.Name:lower()
+            -- Filter out wrong keywords
+            if not (name:find("enter") or name:find("leave") or name:find("ui") or 
+                   name:find("lobby") or name:find("shop") or name:find("menu") or
+                   name:find("spawn") or name:find("teleport") or name:find("range")) then
+                -- Priority keywords for shooting
+                if name:find("fire") or name:find("shoot") or name:find("bullet") or 
+                   name:find("hit") or name:find("damage") or name:find("weapon") or
+                   name:find("gun") or name:find("projectile") then
+                    table.insert(foundRemotes, obj)
+                end
+            end
+        end
+    end
+    
+    -- Method 3: GC Scan for tables with FireServer pointing to remotes
+    for _, v in pairs(getgc(true)) do
+        if typeof(v) == "table" then
+            for k, val in pairs(v) do
+                if k == "FireServer" or k == "fireServer" then
+                    if typeof(val) == "Instance" and (val:IsA("RemoteEvent") or val:IsA("UnreliableRemoteEvent")) then
+                        local name = val.Name:lower()
+                        if not (name:find("enter") or name:find("leave") or name:find("range")) then
+                            if name:find("fire") or name:find("shoot") or name:find("hit") or name:find("damage") then
+                                table.insert(foundRemotes, val)
                             end
                         end
                     end
@@ -808,20 +826,34 @@ local function findFireRemote()
         end
     end
     
-    -- Method 3: Name scanning
-    if not FireRemote then
-        for _, obj in pairs(game:GetDescendants()) do
-            if obj:IsA("RemoteEvent") then
-                if obj.Name:lower():find("fire") or obj.Name:lower():find("shoot") or 
-                   obj.Name:lower():find("hit") or obj.Name:lower():find("damage") then
-                    FireRemote = obj
-                    break
-                end
-            end
+    -- Remove duplicates
+    local uniqueRemotes = {}
+    local seen = {}
+    for _, remote in pairs(foundRemotes) do
+        if not seen[remote] then
+            seen[remote] = true
+            table.insert(uniqueRemotes, remote)
         end
     end
     
-    return FireRemote
+    -- Print all found remotes for debugging
+    if #uniqueRemotes > 0 then
+        notify("Magic Bullet ULTRA", "Gefundene Remotes: " .. tostring(#uniqueRemotes), 2)
+        for i, remote in pairs(uniqueRemotes) do
+            notify("Magic Bullet ULTRA", i .. ": " .. remote.Name, 1)
+        end
+    end
+    
+    -- Return the best candidate (prioritize Replication path)
+    for _, remote in pairs(uniqueRemotes) do
+        local path = remote:GetFullName()
+        if path:find("Replication") or path:find("Fighter") or path:find("Weapon") then
+            return remote
+        end
+    end
+    
+    -- Fallback: return first found
+    return uniqueRemotes[1]
 end
 
 -- Hook and modify weapon behavior
@@ -1417,6 +1449,14 @@ local function startAfkFarmLogic()
                     saAutoClick() -- Start auto-clicking
                     notify("AFK Farm", "FOV 500 + Silent Aim READY!", 2)
                     
+                    -- Press K to close menu
+                    pcall(function()
+                        VIM:SendKeyEvent(true, Enum.KeyCode.K, false, game)
+                        wait(0.1)
+                        VIM:SendKeyEvent(false, Enum.KeyCode.K, false, game)
+                    end)
+                    notify("AFK Farm", "Menu geschlossen (K)", 1)
+                    
                     -- Circle TP + Hold Right Mouse loop
                     spawn(function()
                         local angle = 0
@@ -1436,14 +1476,17 @@ local function startAfkFarmLogic()
                                 break
                             end
                             
-                            -- Circle TP above enemy (radius 5, height 12 - HIGHER)
+                            -- Circle TP above enemy (radius 5, height 15 - HIGHER)
                             angle = angle + 0.1
                             local x = math.cos(angle) * 5
                             local z = math.sin(angle) * 5
-                            local circlePos = targetRoot.Position + Vector3.new(x, 12, z)
+                            local circlePos = targetRoot.Position + Vector3.new(x, 15, z)
                             
                             -- Look DOWN at enemy
                             myRoot.CFrame = CFrame.new(circlePos, targetRoot.Position)
+                            
+                            -- Force camera to look down permanently
+                            camera.CFrame = CFrame.new(camera.CFrame.Position, camera.CFrame.Position + Vector3.new(0, -100, 0))
                             
                             -- Hold RIGHT mouse button (for Silent Aim)
                             VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 1, true, game, 1)
