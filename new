@@ -23,13 +23,14 @@ local queueteleport = (syn and syn.queue_on_teleport) or
 
 -- KeepAirwave setting (like KeepInfYield)
 getgenv().KeepAirwave = true
+getgenv().AFK_FARM_ACTIVE = getgenv().AFK_FARM_ACTIVE or false
 
 -- EXACT Infinite Yield teleport method
 local TeleportCheck = false
 localPlayer.OnTeleport:Connect(function(State)
     if getgenv().KeepAirwave and (not TeleportCheck) and queueteleport then
         TeleportCheck = true
-        queueteleport("loadstring(game:HttpGet('https://raw.githubusercontent.com/Davin48/rivals-script/refs/heads/main/new'))()")
+        queueteleport("getgenv().AFK_FARM_ACTIVE = " .. tostring(getgenv().AFK_FARM_ACTIVE) .. "; loadstring(game:HttpGet('https://raw.githubusercontent.com/Davin48/rivals-script/refs/heads/main/new'))()")
     end
 end)
 
@@ -726,6 +727,114 @@ FovSection:AddSlider("FOV Size", 50, 150, 500, 10, function(v)
     FOV.Size = v
 end)
 
+-- ============================================
+-- PREMIUM MAGIC BULLET SYSTEM
+-- ============================================
+local MagicBullet = {
+    Enabled = false,
+    Wallbang = true,
+    AutoRedirect = true,
+    HeadshotOnly = true,
+    DamageMultiplier = 1.5
+}
+
+local function getClosestEnemyHead()
+    local closest = nil
+    local shortest = math.huge
+    local center = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
+    
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= localPlayer and player.Character then
+            local head = player.Character:FindFirstChild("Head")
+            local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+            if head and humanoid and humanoid.Health > 0 then
+                local pos, visible = worldToScreen(head.Position)
+                if visible or MagicBullet.Wallbang then
+                    local dist = (Vector2.new(pos.X, pos.Y) - center).Magnitude
+                    if dist < shortest then
+                        shortest = dist
+                        closest = head
+                    end
+                end
+            end
+        end
+    end
+    return closest
+end
+
+-- Magic Bullet Hook
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local originalFireServer = nil
+local originalInvokeServer = nil
+
+local function enableMagicBullet()
+    if not originalFireServer then
+        originalFireServer = ReplicatedStorage.Remotes.Replication.Fighter.Fire.FireServer
+    end
+    if not originalInvokeServer then
+        originalInvokeServer = ReplicatedStorage.Remotes.Replication.Fighter.Fire.InvokeServer
+    end
+    
+    -- Hook FireServer
+    ReplicatedStorage.Remotes.Replication.Fighter.Fire.FireServer = function(self, ...)
+        if MagicBullet.Enabled then
+            local target = getClosestEnemyHead()
+            if target then
+                local args = {...}
+                -- Redirect shot to target head
+                if args[1] and typeof(args[1]) == "CFrame" then
+                    args[1] = CFrame.new(args[1].Position, target.Position)
+                end
+                -- Apply damage multiplier
+                if args[3] and typeof(args[3]) == "number" then
+                    args[3] = args[3] * MagicBullet.DamageMultiplier
+                end
+                return originalFireServer(self, unpack(args))
+            end
+        end
+        return originalFireServer(self, ...)
+    end
+end
+
+local function disableMagicBullet()
+    if originalFireServer then
+        ReplicatedStorage.Remotes.Replication.Fighter.Fire.FireServer = originalFireServer
+    end
+    if originalInvokeServer then
+        ReplicatedStorage.Remotes.Replication.Fighter.Fire.InvokeServer = originalInvokeServer
+    end
+end
+
+-- Magic Bullet Section
+local MagicSection = AimbotTab:CreateSector("Magic Bullet", "left")
+
+MagicSection:AddToggle("Enable Magic Bullet", false, function(v)
+    MagicBullet.Enabled = v
+    if v then
+        enableMagicBullet()
+        notify("Magic Bullet", "Premium Magic Bullet aktiviert!", 3)
+    else
+        disableMagicBullet()
+        notify("Magic Bullet", "Deaktiviert", 2)
+    end
+end)
+
+MagicSection:AddToggle("Wallbang", true, function(v)
+    MagicBullet.Wallbang = v
+end)
+
+MagicSection:AddToggle("Auto Redirect", true, function(v)
+    MagicBullet.AutoRedirect = v
+end)
+
+MagicSection:AddToggle("Headshot Only", true, function(v)
+    MagicBullet.HeadshotOnly = v
+end)
+
+MagicSection:AddSlider("Damage Multiplier", 1, 1.5, 5, 0.5, function(v)
+    MagicBullet.DamageMultiplier = v
+end)
+
 -- ESP Tab
 local EspTab = Window:CreateTab("ESP")
 local EspMain = EspTab:CreateSector("Main", "left")
@@ -997,16 +1106,36 @@ local tpEnabled = false
 local tpConnection = nil
 
 local function getPlayerNames()
-    local names = {"None"}
+    local names = {}
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= localPlayer then
             table.insert(names, p.Name)
         end
     end
+    if #names == 0 then
+        names = {"None"}
+    end
     return names
 end
 
-TpSection:AddDropdown("TP Behind Player", getPlayerNames(), "None", false, function(v)
+-- Auto-update dropdown when players join/leave
+local tpDropdown = nil
+
+local function updateTpDropdown()
+    if tpDropdown and tpDropdown.SetOptions then
+        local names = getPlayerNames()
+        tpDropdown:SetOptions(names)
+        -- Auto-select enemy in 1v1
+        if #names == 1 and names[1] ~= "None" then
+            tpDropdown:SetValue(names[1])
+        end
+    end
+end
+
+Players.PlayerAdded:Connect(updateTpDropdown)
+Players.PlayerRemoving:Connect(updateTpDropdown)
+
+tpDropdown = TpSection:AddDropdown("TP Behind Player", getPlayerNames(), "None", false, function(v)
     if v == "None" then
         tpEnabled = false
         tpTarget = nil
@@ -1077,116 +1206,176 @@ local Maps = {"Arena", "Ruins", "Construction", "Desert", "Warehouse", "Shipyard
 local Weapons = {"Assault Rifle", "Handgun", "Fists", "Grenade", "Revolver", "Shotgun", "SMG"}
 
 -- UI Elements (Fixed AFK Farm with Silent Aim)
-FarmSection:AddToggle("Enable AFK Farm", false, function(v)
-    FarmSettings.Enabled = v
-    if v then
-        notify("AFK Farm", "Auto 1v1 Farm aktiviert - Settings werden automatisch gesetzt", 3)
-        
-        -- FORCE ENABLE SETTINGS IMMEDIATELY
-        FOV.Size = 500
-        FOV.Enabled = true
-        silentAimEnabled = true
-        notify("AFK Farm", "FOV 500 + Silent Aim aktiviert!", 2)
-        
-        -- Get ReplicatedStorage service
-        local ReplicatedStorage = game:GetService("ReplicatedStorage")
-        local VIM = game:GetService("VirtualInputManager")
-        
-        -- Queue/Map/Weapons loop (always running)
-        spawn(function()
-            while FarmSettings.Enabled do
-                pcall(function()
-                    local args = {[1] = "1v1"}
-                    ReplicatedStorage.Remotes.Matchmaking.JoinQueue:InvokeServer(unpack(args))
-                end)
-                pcall(function()
-                    local args = {[1] = FarmSettings.Map}
-                    ReplicatedStorage.Remotes.Duels.VoteMap:FireServer(unpack(args))
-                end)
-                pcall(function()
-                    local args = {[1] = {FarmSettings.Weapon, "Handgun", "Fists", "Grenade"}}
-                    ReplicatedStorage.Remotes.Replication.Fighter.PickWeapons:FireServer(unpack(args))
-                end)
-                wait(1.1)
-            end
-        end)
-        
-        -- Main combat loop: Hold Right Mouse + Look Down + Auto Shoot
-        spawn(function()
-            while FarmSettings.Enabled do
-                -- Only fight when exactly 2 players (1v1)
-                if #Players:GetPlayers() == 2 then
-                    -- Wait for our character to exist and be alive
-                    while FarmSettings.Enabled and (not localPlayer.Character or not localPlayer.Character:FindFirstChild("Humanoid") or localPlayer.Character.Humanoid.Health <= 0) do
-                        wait(0.5)
-                    end
-                    
-                    -- Find enemy
-                    local target = nil
-                    for _, p in pairs(Players:GetPlayers()) do
-                        if p ~= localPlayer then
-                            target = p
-                            break
-                        end
-                    end
-                    
-                    -- If enemy exists and is alive, start combat
-                    if target and target.Character and target.Character:FindFirstChild("Humanoid") and target.Character.Humanoid.Health > 0 then
-                        local combatActive = true
-                        
-                        -- Hold Right Mouse + Look Down + Auto Shoot
-                        spawn(function()
-                            while combatActive and FarmSettings.Enabled do
-                                if not target or not target.Character or not target.Character:FindFirstChild("Humanoid") or target.Character.Humanoid.Health <= 0 then
-                                    break
-                                end
-                                if not localPlayer.Character or not localPlayer.Character:FindFirstChild("Humanoid") or localPlayer.Character.Humanoid.Health <= 0 then
-                                    break
-                                end
-                                
-                                -- Hold right mouse button (index 1 = right mouse)
-                                VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 1, true, game, 1)
-                                
-                                -- Look down at ground (90 degrees down)
-                                local cam = workspace.CurrentCamera
-                                cam.CFrame = CFrame.new(cam.CFrame.Position, cam.CFrame.Position + Vector3.new(0, -10, 0))
-                                
-                                -- Auto shoot (left click)
-                                VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 0, true, game, 1)
-                                VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 0, false, game, 1)
-                                
-                                RunService.RenderStepped:Wait()
-                            end
-                            -- Release right mouse when combat ends
-                            VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 1, false, game, 1)
-                        end)
-                        
-                        -- Wait for enemy to die OR for us to die
-                        while FarmSettings.Enabled and target and target.Character and target.Character:FindFirstChild("Humanoid") and target.Character.Humanoid.Health > 0 do
-                            -- Check if we died
-                            if not localPlayer.Character or not localPlayer.Character:FindFirstChild("Humanoid") or localPlayer.Character.Humanoid.Health <= 0 then
-                                combatActive = false
-                                break
-                            end
-                            wait(0.3)
-                        end
-                        
-                        combatActive = false
-                        -- Release right mouse button
-                        VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 1, false, game, 1)
-                        wait(2) -- Short pause before looking for enemy again
+local afkFarmToggle = nil
+
+local function startAfkFarmLogic()
+    if not FarmSettings.Enabled then return end
+    
+    notify("AFK Farm", "Auto 1v1 Farm aktiviert - Settings werden automatisch gesetzt", 3)
+    getgenv().AFK_FARM_ACTIVE = true
+    
+    -- FORCE ENABLE SETTINGS IMMEDIATELY
+    FOV.Size = 500
+    FOV.Enabled = true
+    silentAimEnabled = true
+    notify("AFK Farm", "FOV 500 + Silent Aim aktiviert!", 2)
+    
+    -- Get ReplicatedStorage service
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local VIM = game:GetService("VirtualInputManager")
+    
+    -- Queue/Map/Weapons loop (always running)
+    spawn(function()
+        while FarmSettings.Enabled do
+            pcall(function()
+                local args = {[1] = "1v1"}
+                ReplicatedStorage.Remotes.Matchmaking.JoinQueue:InvokeServer(unpack(args))
+            end)
+            pcall(function()
+                local args = {[1] = FarmSettings.Map}
+                ReplicatedStorage.Remotes.Duels.VoteMap:FireServer(unpack(args))
+            end)
+            pcall(function()
+                local args = {[1] = {FarmSettings.Weapon, "Handgun", "Fists", "Grenade"}}
+                ReplicatedStorage.Remotes.Replication.Fighter.PickWeapons:FireServer(unpack(args))
+            end)
+            wait(1.1)
+        end
+    end)
+    
+    -- Main combat loop: Circle TP + Silent Aim + Auto Shoot
+    spawn(function()
+        while FarmSettings.Enabled do
+            -- Check if in 1v1 (exactly 2 players)
+            if #Players:GetPlayers() == 2 then
+                -- Find enemy first
+                local target = nil
+                for _, p in pairs(Players:GetPlayers()) do
+                    if p ~= localPlayer then
+                        target = p
+                        break
                     end
                 end
-                wait(0.5)
+                
+                -- If no enemy found, wait and retry
+                if not target then
+                    wait(1)
+                    continue
+                end
+                
+                -- Wait for our character and enemy to both be alive
+                local bothAlive = false
+                local waitStart = tick()
+                while FarmSettings.Enabled and tick() - waitStart < 30 do
+                    local myChar = localPlayer.Character
+                    local myHumanoid = myChar and myChar:FindFirstChild("Humanoid")
+                    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+                    local targetChar = target.Character
+                    local targetHumanoid = targetChar and targetChar:FindFirstChild("Humanoid")
+                    local targetRoot = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
+                    
+                    if myHumanoid and myHumanoid.Health > 0 and myRoot and 
+                       targetHumanoid and targetHumanoid.Health > 0 and targetRoot then
+                        bothAlive = true
+                        break
+                    end
+                    wait(0.3)
+                end
+                
+                -- If both alive, start combat
+                if bothAlive and FarmSettings.Enabled then
+                    notify("AFK Farm", "Kampf gestartet! Fliege über Gegner...", 2)
+                    local combatActive = true
+                    local angle = 0
+                    
+                    -- Circle TP + Auto Shoot loop
+                    spawn(function()
+                        while combatActive and FarmSettings.Enabled do
+                            -- Check both still alive
+                            local myChar = localPlayer.Character
+                            local myHumanoid = myChar and myChar:FindFirstChild("Humanoid")
+                            local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+                            local targetChar = target and target.Character
+                            local targetHumanoid = targetChar and targetChar:FindFirstChild("Humanoid")
+                            local targetRoot = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
+                            
+                            if not myHumanoid or myHumanoid.Health <= 0 or not myRoot then
+                                break
+                            end
+                            if not targetHumanoid or targetHumanoid.Health <= 0 or not targetRoot then
+                                break
+                            end
+                            
+                            -- Circle TP above enemy (radius 6, height 8)
+                            angle = angle + 0.1
+                            local x = math.cos(angle) * 6
+                            local z = math.sin(angle) * 6
+                            local y = targetRoot.Position.Y + 8
+                            local circlePos = targetRoot.Position + Vector3.new(x, 8, z)
+                            myRoot.CFrame = CFrame.new(circlePos, targetRoot.Position)
+                            
+                            -- Auto shoot
+                            VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 0, true, game, 1)
+                            VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 0, false, game, 1)
+                            
+                            RunService.RenderStepped:Wait()
+                        end
+                    end)
+                    
+                    -- Wait for round to end (someone dies)
+                    while FarmSettings.Enabled and combatActive do
+                        local myChar = localPlayer.Character
+                        local myHumanoid = myChar and myChar:FindFirstChild("Humanoid")
+                        local targetChar = target and target.Character
+                        local targetHumanoid = targetChar and targetChar:FindFirstChild("Humanoid")
+                        
+                        -- If we die
+                        if not myHumanoid or myHumanoid.Health <= 0 then
+                            combatActive = false
+                            notify("AFK Farm", "Gestorben - warte auf Respawn...", 2)
+                            break
+                        end
+                        
+                        -- If enemy dies
+                        if not targetHumanoid or targetHumanoid.Health <= 0 then
+                            combatActive = false
+                            notify("AFK Farm", "Gegner eliminiert! - Win!", 2)
+                            -- Auto search for new round
+                            FarmSettings.IsInGame = false
+                            break
+                        end
+                        
+                        wait(0.2)
+                    end
+                    
+                    -- Wait before looking for new enemy
+                    wait(3)
+                end
             end
-        end)
+            wait(0.5)
+        end
+    end)
+end
+
+afkFarmToggle = FarmSection:AddToggle("Enable AFK Farm", getgenv().AFK_FARM_ACTIVE, function(v)
+    FarmSettings.Enabled = v
+    if v then
+        startAfkFarmLogic()
     else
         notify("AFK Farm", "Auto 1v1 Farm deaktiviert", 2)
-        -- Release right mouse button when disabled
-        local VIM = game:GetService("VirtualInputManager")
-        VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 1, false, game, 1)
+        getgenv().AFK_FARM_ACTIVE = false
     end
 end)
+
+-- Auto-start if was active before teleport
+if getgenv().AFK_FARM_ACTIVE then
+    task.wait(2)
+    FarmSettings.Enabled = true
+    if afkFarmToggle and afkFarmToggle.SetValue then
+        afkFarmToggle:SetValue(true)
+    end
+    startAfkFarmLogic()
+end
 
 FarmSection:AddDropdown("Map", Maps, "Arena", false, function(v)
     FarmSettings.Map = v
@@ -1408,4 +1597,3 @@ local function stopFarmLoop()
 end
 
 notify("air.wave", "Script loaded successfully!")
-
