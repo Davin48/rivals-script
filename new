@@ -1261,6 +1261,8 @@ local UnlockSection = MiscTab:CreateSector("Unlock All", "left")
 -- Advanced Remote Scanner
 local function scanAllRemotes()
     local RS = game:GetService("ReplicatedStorage")
+    local Players = game:GetService("Players")
+    local localPlayer = Players.LocalPlayer
     local categories = {
         unlock = {},
         weapon = {},
@@ -1270,29 +1272,250 @@ local function scanAllRemotes()
         other = {}
     }
     
+    -- Helper function to categorize remotes
+    local function categorizeRemote(obj)
+        if not (obj:IsA("RemoteEvent") or obj:IsA("UnreliableRemoteEvent") or obj:IsA("RemoteFunction")) then
+            return
+        end
+        
+        local name = obj.Name:lower()
+        
+        -- Categorize remotes
+        if name:find("unlock") or name:find("grant") or name:find("give") then
+            table.insert(categories.unlock, obj)
+        elseif name:find("weapon") or name:find("gun") or name:find("arm") or name:find("loadout") then
+            table.insert(categories.weapon, obj)
+        elseif name:find("item") or name:find("charm") or name:find("skin") or name:find("camo") or name:find("cosmetic") then
+            table.insert(categories.item, obj)
+        elseif name:find("level") or name:find("xp") or name:find("rank") or name:find("prestige") or name:find("tier") then
+            table.insert(categories.level, obj)
+        elseif name:find("fire") or name:find("shoot") or name:find("hit") or name:find("damage") then
+            table.insert(categories.fire, obj)
+        else
+            table.insert(categories.other, obj)
+        end
+    end
+    
+    -- Scan ReplicatedStorage
     for _, obj in pairs(RS:GetDescendants()) do
-        if obj:IsA("RemoteEvent") or obj:IsA("UnreliableRemoteEvent") or obj:IsA("RemoteFunction") then
-            local name = obj.Name:lower()
-            local path = obj:GetFullName()
-            
-            -- Categorize remotes
-            if name:find("unlock") then
-                table.insert(categories.unlock, obj)
-            elseif name:find("weapon") or name:find("gun") then
-                table.insert(categories.weapon, obj)
-            elseif name:find("item") or name:find("charm") or name:find("skin") or name:find("camo") then
-                table.insert(categories.item, obj)
-            elseif name:find("level") or name:find("xp") or name:find("rank") or name:find("prestige") then
-                table.insert(categories.level, obj)
-            elseif name:find("fire") or name:find("shoot") or name:find("hit") or name:find("damage") then
-                table.insert(categories.fire, obj)
-            else
-                table.insert(categories.other, obj)
+        categorizeRemote(obj)
+    end
+    
+    -- Scan PlayerScripts and Player
+    if localPlayer then
+        -- Scan Player object itself
+        for _, obj in pairs(localPlayer:GetDescendants()) do
+            categorizeRemote(obj)
+        end
+        
+        -- Scan PlayerScripts
+        local playerScripts = localPlayer:FindFirstChild("PlayerScripts")
+        if playerScripts then
+            for _, obj in pairs(playerScripts:GetDescendants()) do
+                categorizeRemote(obj)
+            end
+        end
+        
+        -- Scan PlayerGui
+        local playerGui = localPlayer:FindFirstChild("PlayerGui")
+        if playerGui then
+            for _, obj in pairs(playerGui:GetDescendants()) do
+                categorizeRemote(obj)
+            end
+        end
+    end
+    
+    -- GC Scan for hidden remotes in tables
+    for _, v in pairs(getgc(true)) do
+        if typeof(v) == "table" then
+            for k, val in pairs(v) do
+                if typeof(val) == "Instance" and (val:IsA("RemoteEvent") or val:IsA("RemoteFunction")) then
+                    local name = val.Name:lower()
+                    if name:find("unlock") or name:find("weapon") or name:find("item") then
+                        -- Check if already in categories
+                        local found = false
+                        for _, cat in pairs(categories) do
+                            for _, remote in pairs(cat) do
+                                if remote == val then
+                                    found = true
+                                    break
+                                end
+                            end
+                            if found then break end
+                        end
+                        if not found then
+                            if name:find("unlock") then
+                                table.insert(categories.unlock, val)
+                            elseif name:find("weapon") then
+                                table.insert(categories.weapon, val)
+                            elseif name:find("item") then
+                                table.insert(categories.item, val)
+                            end
+                        end
+                    end
+                end
             end
         end
     end
     
     return categories
+end
+
+-- PREMIUM UNLOCK ALL FUNCTION
+local function premiumUnlockAll()
+    local categories = scanAllRemotes()
+    local totalCalls = 0
+    local RS = game:GetService("ReplicatedStorage")
+    local Players = game:GetService("Players")
+    local localPlayer = Players.LocalPlayer
+    
+    notify("Unlock All", "PREMIUM MODE - Scanne alle Remotes...", 3)
+    
+    -- Extended list of all possible weapon names in Rivals (from decompiled files)
+    local weaponList = {
+        "Assault Rifle", "Handgun", "Revolver", "Shotgun", "SMG", 
+        "Sniper", "Bow", "Burst Rifle", "Flamethrower", "Grenade Launcher",
+        "Minigun", "Paintball Gun", "RPG", "Flare Gun", "Exogun",
+        "LMG", "Grenade", "Fists", "Knife",
+        "AK47", "M4A1", "MP5", "Desert Eagle", "AWP", "M249"
+    }
+    
+    -- Extended list of possible arguments
+    local allArgs = {
+        {}, -- empty
+        {true},
+        {"all"},
+        {"All"},
+        {999},
+        {9999},
+        {"unlock"},
+        {"Unlock"},
+        {"UnlockAll"},
+        {"grant"},
+        {"Give"},
+        {localPlayer.Name},
+        {localPlayer.UserId},
+        {"primary"},
+        {"secondary"},
+        {"melee"},
+        {"special"},
+        {"all", true},
+        {true, "all"},
+        {"weapons"},
+        {"items"},
+        {"skins"},
+        {"charms"},
+        {"camos"},
+        {Enum.UserInputType.MouseButton1}, -- Try enum
+        {1},
+        {"1"},
+        {os.time()}, -- timestamp
+        {game.PlaceId}, -- place id
+        {"permanent"},
+        {"forever"},
+        {math.huge} -- infinity
+    }
+    
+    -- Try ALL remotes with ALL argument combinations
+    local allRemotes = {}
+    for category, remotes in pairs(categories) do
+        for _, remote in pairs(remotes) do
+            table.insert(allRemotes, remote)
+        end
+    end
+    
+    notify("Unlock All", "Gefunden: " .. #allRemotes .. " Remotes", 2)
+    
+    -- First pass: Try specific patterns
+    for _, remote in pairs(allRemotes) do
+        local name = remote.Name:lower()
+        
+        for _, args in pairs(allArgs) do
+            pcall(function()
+                if remote:IsA("RemoteFunction") then
+                    remote:InvokeServer(unpack(args))
+                else
+                    remote:FireServer(unpack(args))
+                end
+                totalCalls = totalCalls + 1
+            end)
+        end
+        
+        -- Try with weapon names
+        if name:find("weapon") or name:find("unlock") then
+            for _, weapon in pairs(weaponList) do
+                pcall(function()
+                    if remote:IsA("RemoteFunction") then
+                        remote:InvokeServer(weapon)
+                        remote:InvokeServer(weapon, true)
+                    else
+                        remote:FireServer(weapon)
+                        remote:FireServer(weapon, true)
+                    end
+                    totalCalls = totalCalls + 2
+                end)
+            end
+        end
+        
+        task.wait(0.005) -- Tiny delay to prevent lag
+    end
+    
+    -- Second pass: Scan Player and PlayerScripts for BindableEvents/Functions
+    local locationsToScan = {RS}
+    if localPlayer then
+        table.insert(locationsToScan, localPlayer)
+        local playerScripts = localPlayer:FindFirstChild("PlayerScripts")
+        if playerScripts then
+            table.insert(locationsToScan, playerScripts)
+        end
+        local playerGui = localPlayer:FindFirstChild("PlayerGui")
+        if playerGui then
+            table.insert(locationsToScan, playerGui)
+        end
+    end
+    
+    for _, location in pairs(locationsToScan) do
+        for _, obj in pairs(location:GetDescendants()) do
+            if obj:IsA("BindableEvent") or obj:IsA("BindableFunction") then
+                local name = obj.Name:lower()
+                if name:find("unlock") or name:find("weapon") or name:find("item") then
+                    pcall(function()
+                        if obj:IsA("BindableFunction") then
+                            obj:Invoke("all")
+                        else
+                            obj:Fire("all")
+                        end
+                    end)
+                end
+            end
+        end
+    end
+    
+    -- Third pass: Scan all locations for ModuleScripts
+    for _, location in pairs(locationsToScan) do
+        for _, module in pairs(location:GetDescendants()) do
+            if module:IsA("ModuleScript") then
+                local name = module.Name:lower()
+                if name:find("weapon") or name:find("unlock") or name:find("data") or name:find("inventory") then
+                    pcall(function()
+                        local req = require(module)
+                        if typeof(req) == "table" then
+                            -- Try to call any function that looks like unlock
+                            for k, v in pairs(req) do
+                                if typeof(v) == "function" and (k:lower():find("unlock") or k:lower():find("grant") or k:lower():find("give")) then
+                                    v("all")
+                                    v(true)
+                                    v(999)
+                                end
+                            end
+                        end
+                    end)
+                end
+            end
+        end
+    end
+    
+    notify("Unlock All", "PREMIUM fertig! " .. totalCalls .. " Aufrufe", 3)
 end
 
 UnlockSection:AddButton("Scan All Remotes", function()
@@ -1312,91 +1535,7 @@ UnlockSection:AddButton("Scan All Remotes", function()
 end)
 
 UnlockSection:AddButton("Unlock Everything", function()
-    notify("Unlock All", "Starte komplettes Unlock...", 3)
-    local categories = scanAllRemotes()
-    local unlockedCount = 0
-    
-    -- Define all possible unlock arguments to try
-    local unlockArgs = {
-        {}, -- no args
-        {true},
-        {"all"},
-        {999},
-        {"all", true},
-        {true, "all"},
-        {"unlock"},
-        {"UnlockAll"},
-        {localPlayer.Name},
-        {localPlayer.UserId},
-        {"primary", "all"},
-        {"secondary", "all"},
-        {"melee", "all"},
-        {"special", "all"}
-    }
-    
-    -- Try all weapon remotes with multiple argument patterns
-    for _, remote in pairs(categories.weapon) do
-        for _, args in pairs(unlockArgs) do
-            pcall(function()
-                if remote:IsA("RemoteFunction") then
-                    remote:InvokeServer(unpack(args))
-                else
-                    remote:FireServer(unpack(args))
-                end
-                unlockedCount = unlockedCount + 1
-            end)
-            task.wait(0.01) -- Small delay between calls
-        end
-    end
-    
-    -- Try all item remotes (charms, skins, camos)
-    for _, remote in pairs(categories.item) do
-        for _, args in pairs(unlockArgs) do
-            pcall(function()
-                if remote:IsA("RemoteFunction") then
-                    remote:InvokeServer(unpack(args))
-                else
-                    remote:FireServer(unpack(args))
-                end
-                unlockedCount = unlockedCount + 1
-            end)
-            task.wait(0.01)
-        end
-    end
-    
-    -- Fire all unlock remotes
-    for _, remote in pairs(categories.unlock) do
-        for _, args in pairs(unlockArgs) do
-            pcall(function()
-                if remote:IsA("RemoteFunction") then
-                    remote:InvokeServer(unpack(args))
-                else
-                    remote:FireServer(unpack(args))
-                end
-                unlockedCount = unlockedCount + 1
-            end)
-            task.wait(0.01)
-        end
-    end
-    
-    -- Also try "other" category remotes that might be weapon related
-    for _, remote in pairs(categories.other) do
-        local name = remote.Name:lower()
-        if name:find("purchase") or name:find("buy") or name:find("equip") or name:find("select") then
-            for _, args in pairs(unlockArgs) do
-                pcall(function()
-                    if remote:IsA("RemoteFunction") then
-                        remote:InvokeServer(unpack(args))
-                    else
-                        remote:FireServer(unpack(args))
-                    end
-                end)
-                task.wait(0.01)
-            end
-        end
-    end
-    
-    notify("Unlock All", "Fertig! " .. unlockedCount .. " Aufrufe ausgeführt", 3)
+    premiumUnlockAll()
 end)
 
 UnlockSection:AddButton("Max Level All", function()
@@ -1659,19 +1798,23 @@ local function startAfkFarmLogic()
                             myRoot.CFrame = CFrame.new(circlePos, lookTarget)
                             
                             -- Force camera to look DOWN at enemy using multiple methods
-                            -- Method 1: Set Camera CFrame directly
+                            -- Method 1: Set Camera CFrame directly (continuously)
                             local camPos = camera.CFrame.Position
                             local lookDownPos = Vector3.new(lookTarget.X, lookTarget.Y - 10, lookTarget.Z)
                             camera.CFrame = CFrame.new(camPos, lookDownPos)
                             
-                            -- Method 2: Simulate mouse movement to look down
-                            local centerX = camera.ViewportSize.X / 2
-                            local centerY = camera.ViewportSize.Y / 2
-                            -- Move mouse to center of screen (looking straight)
-                            VIM:SendMouseMoveEvent(centerX, centerY + 200, game) -- Look down offset
+                            -- Method 2: Use relative mouse movement (more aggressive)
+                            local UserInputService = game:GetService("UserInputService")
+                            -- Lock mouse to center and then move it down
+                            UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+                            -- Force mouse delta to look down
+                            local currentPos = UserInputService:GetMouseLocation()
+                            VIM:SendMouseMoveEvent(currentPos.X, currentPos.Y + 500, game) -- Large offset
                             
-                            -- Hold RIGHT mouse button (for Silent Aim)
-                            VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 1, true, game, 1)
+                            -- Method 3: Mouse button hold at bottom of screen
+                            local screenX = camera.ViewportSize.X / 2
+                            local screenY = camera.ViewportSize.Y
+                            VIM:SendMouseButtonEvent(screenX, screenY, 1, true, game, 1)
                             
                             -- Let Silent Aim do the shooting - NO left click
                             -- Silent Aim will auto-shoot when right mouse is held
