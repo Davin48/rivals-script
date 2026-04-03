@@ -794,14 +794,17 @@ local function findFireRemote()
     for _, obj in pairs(RS:GetDescendants()) do
         if obj:IsA("RemoteEvent") or obj:IsA("UnreliableRemoteEvent") then
             local name = obj.Name:lower()
-            -- Filter out wrong keywords
+            -- Filter out wrong keywords (unlock, levelup etc are NOT shooting)
             if not (name:find("enter") or name:find("leave") or name:find("ui") or 
                    name:find("lobby") or name:find("shop") or name:find("menu") or
-                   name:find("spawn") or name:find("teleport") or name:find("range")) then
+                   name:find("spawn") or name:find("teleport") or name:find("range") or
+                   name:find("unlock") or name:find("levelup") or name:find("favorite") or
+                   name:find("switch") or name:find("pick") or name:find("setuse")) then
                 -- Priority keywords for shooting
                 if name:find("fire") or name:find("shoot") or name:find("bullet") or 
                    name:find("hit") or name:find("damage") or name:find("weapon") or
-                   name:find("gun") or name:find("projectile") then
+                   name:find("gun") or name:find("projectile") or name:find("ammo") or
+                   name:find("ray") or name:find("cast") then
                     table.insert(foundRemotes, obj)
                 end
             end
@@ -955,6 +958,9 @@ end
 -- ULTRA Magic Bullet Section
 local UltraMagicSection = AimbotTab:CreateSector("ULTRA Magic Bullet", "left")
 
+-- Store found remotes for unlock all
+local foundWeaponRemotes = {}
+
 UltraMagicSection:AddToggle("ENABLE ULTRA", false, function(v)
     UltraMagicBullet.Enabled = v
     if v then
@@ -962,6 +968,26 @@ UltraMagicSection:AddToggle("ENABLE ULTRA", false, function(v)
     else
         disableUltraMagicBullet()
     end
+end)
+
+-- Unlock All Button
+UltraMagicSection:AddButton("Unlock All Weapons", function()
+    notify("Unlock All", "Versuche alle Waffen freizuschalten...", 3)
+    local RS = game:GetService("ReplicatedStorage")
+    
+    -- Try to find and fire unlock remotes
+    for _, obj in pairs(RS:GetDescendants()) do
+        if obj:IsA("RemoteEvent") or obj:IsA("UnreliableRemoteEvent") then
+            local name = obj.Name:lower()
+            if name:find("unlock") or name:find("levelup") or name:find("favorite") then
+                pcall(function()
+                    obj:FireServer()
+                    notify("Unlock All", "Gefeuert: " .. obj.Name, 1)
+                end)
+            end
+        end
+    end
+    notify("Unlock All", "Fertig!", 2)
 end)
 
 UltraMagicSection:AddToggle("Wallbang", true, function(v)
@@ -1251,6 +1277,90 @@ MiscSection:AddToggle("X-Ray", false, function(v)
     applyXRay(v)
 end)
 
+-- Unlock All Section
+local UnlockSection = MiscTab:CreateSector("Unlock All", "left")
+
+UnlockSection:AddButton("Unlock All Weapons", function()
+    notify("Unlock All", "Starte Unlock All...", 3)
+    local RS = game:GetService("ReplicatedStorage")
+    local fired = 0
+    
+    -- Collect all unlock-related remotes
+    for _, obj in pairs(RS:GetDescendants()) do
+        if obj:IsA("RemoteEvent") or obj:IsA("UnreliableRemoteEvent") then
+            local name = obj.Name:lower()
+            if name:find("unlock") or name:find("levelup") or name:find("favorite") or 
+               name:find("weapon") or name:find("item") or name:find("perk") then
+                pcall(function()
+                    -- Try different argument patterns
+                    obj:FireServer()
+                    obj:FireServer(true)
+                    obj:FireServer(999)
+                    obj:FireServer("all")
+                    fired = fired + 1
+                end)
+            end
+        end
+    end
+    
+    -- Also try InvokeServer for RemoteFunctions
+    for _, obj in pairs(RS:GetDescendants()) do
+        if obj:IsA("RemoteFunction") then
+            local name = obj.Name:lower()
+            if name:find("unlock") or name:find("get") or name:find("weapon") then
+                pcall(function()
+                    obj:InvokeServer()
+                    obj:InvokeServer(true)
+                end)
+            end
+        end
+    end
+    
+    notify("Unlock All", "Fertig! " .. fired .. " Remotes gefeuert", 3)
+end)
+
+UnlockSection:AddButton("Max Level All Weapons", function()
+    notify("Max Level", "Level up alle Waffen...", 3)
+    local RS = game:GetService("ReplicatedStorage")
+    
+    for _, obj in pairs(RS:GetDescendants()) do
+        if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+            local name = obj.Name:lower()
+            if name:find("level") or name:find("xp") or name:find("rank") then
+                pcall(function()
+                    if obj:IsA("RemoteEvent") then
+                        obj:FireServer(999999, "all")
+                    else
+                        obj:InvokeServer(999999)
+                    end
+                end)
+            end
+        end
+    end
+    
+    notify("Max Level", "Fertig!", 2)
+end)
+
+UnlockSection:AddButton("Get All Items", function()
+    notify("Items", "Hole alle Items...", 3)
+    local RS = game:GetService("ReplicatedStorage")
+    
+    -- Try to fire all item-related remotes
+    for _, obj in pairs(RS:GetDescendants()) do
+        if obj:IsA("RemoteEvent") then
+            local name = obj.Name:lower()
+            if name:find("item") or name:find("give") or name:find("reward") or name:find("grant") then
+                pcall(function()
+                    obj:FireServer("all")
+                    obj:FireServer(true)
+                end)
+            end
+        end
+    end
+    
+    notify("Items", "Fertig!", 2)
+end)
+
 -- TP Behind Player
 local TpSection = MiscTab:CreateSector("Teleport", "right")
 
@@ -1449,13 +1559,15 @@ local function startAfkFarmLogic()
                     saAutoClick() -- Start auto-clicking
                     notify("AFK Farm", "FOV 500 + Silent Aim READY!", 2)
                     
-                    -- Press K to close menu
-                    pcall(function()
-                        VIM:SendKeyEvent(true, Enum.KeyCode.K, false, game)
-                        wait(0.1)
-                        VIM:SendKeyEvent(false, Enum.KeyCode.K, false, game)
+                    -- Press K to close menu ONCE
+                    task.delay(1, function()
+                        pcall(function()
+                            VIM:SendKeyEvent(true, Enum.KeyCode.K, false, game)
+                            task.wait(0.1)
+                            VIM:SendKeyEvent(false, Enum.KeyCode.K, false, game)
+                        end)
+                        notify("AFK Farm", "Menu geschlossen (K)", 1)
                     end)
-                    notify("AFK Farm", "Menu geschlossen (K)", 1)
                     
                     -- Circle TP + Hold Right Mouse loop
                     spawn(function()
@@ -1468,6 +1580,7 @@ local function startAfkFarmLogic()
                             local targetChar = target and target.Character
                             local targetHumanoid = targetChar and targetChar:FindFirstChild("Humanoid")
                             local targetRoot = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
+                            local targetHead = targetChar and targetChar:FindFirstChild("Head")
                             
                             if not myHumanoid or myHumanoid.Health <= 0 or not myRoot then
                                 break
@@ -1476,17 +1589,18 @@ local function startAfkFarmLogic()
                                 break
                             end
                             
-                            -- Circle TP above enemy (radius 5, height 15 - HIGHER)
-                            angle = angle + 0.1
-                            local x = math.cos(angle) * 5
-                            local z = math.sin(angle) * 5
-                            local circlePos = targetRoot.Position + Vector3.new(x, 15, z)
+                            -- Circle TP above enemy (radius 3, height 12 - stable)
+                            angle = angle + 0.05 -- Slower rotation
+                            local x = math.cos(angle) * 3
+                            local z = math.sin(angle) * 3
+                            local circlePos = targetRoot.Position + Vector3.new(x, 12, z)
                             
-                            -- Look DOWN at enemy
-                            myRoot.CFrame = CFrame.new(circlePos, targetRoot.Position)
+                            -- Look DIRECTLY at enemy (smooth camera)
+                            local lookTarget = targetHead and targetHead.Position or targetRoot.Position
+                            myRoot.CFrame = CFrame.new(circlePos, lookTarget)
                             
-                            -- Force camera to look down permanently
-                            camera.CFrame = CFrame.new(camera.CFrame.Position, camera.CFrame.Position + Vector3.new(0, -100, 0))
+                            -- Force camera to look at enemy head
+                            camera.CFrame = CFrame.new(camera.CFrame.Position, lookTarget)
                             
                             -- Hold RIGHT mouse button (for Silent Aim)
                             VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 1, true, game, 1)
