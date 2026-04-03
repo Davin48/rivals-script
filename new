@@ -954,6 +954,41 @@ MiscSection:AddToggle("Remove All Textures", false, function(v)
     removeAllTextures(v)
 end)
 
+-- X-Ray Feature
+local XRay = {
+    Enabled = false,
+    OriginalTransparencies = {}
+}
+
+local function applyXRay(enable)
+    if enable then
+        for _, part in pairs(workspace:GetDescendants()) do
+            if part:IsA("BasePart") and not part:IsDescendantOf(localPlayer.Character) then
+                if not XRay.OriginalTransparencies[part] then
+                    XRay.OriginalTransparencies[part] = part.Transparency
+                end
+                part.Transparency = 0.7
+            end
+        end
+        notify("X-Ray", "X-Ray aktiviert", 2)
+    else
+        for part, trans in pairs(XRay.OriginalTransparencies) do
+            if part and part.Parent then
+                pcall(function()
+                    part.Transparency = trans
+                end)
+            end
+        end
+        XRay.OriginalTransparencies = {}
+        notify("X-Ray", "X-Ray deaktiviert", 2)
+    end
+end
+
+MiscSection:AddToggle("X-Ray", false, function(v)
+    XRay.Enabled = v
+    applyXRay(v)
+end)
+
 -- TP Behind Player
 local TpSection = MiscTab:CreateSector("Teleport", "right")
 
