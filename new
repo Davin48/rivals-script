@@ -1314,41 +1314,89 @@ end)
 UnlockSection:AddButton("Unlock Everything", function()
     notify("Unlock All", "Starte komplettes Unlock...", 3)
     local categories = scanAllRemotes()
+    local unlockedCount = 0
     
-    -- Unlock weapons
+    -- Define all possible unlock arguments to try
+    local unlockArgs = {
+        {}, -- no args
+        {true},
+        {"all"},
+        {999},
+        {"all", true},
+        {true, "all"},
+        {"unlock"},
+        {"UnlockAll"},
+        {localPlayer.Name},
+        {localPlayer.UserId},
+        {"primary", "all"},
+        {"secondary", "all"},
+        {"melee", "all"},
+        {"special", "all"}
+    }
+    
+    -- Try all weapon remotes with multiple argument patterns
     for _, remote in pairs(categories.weapon) do
-        pcall(function()
-            if remote:IsA("RemoteFunction") then
-                remote:InvokeServer("all")
-            else
-                remote:FireServer("all", true, 999)
-            end
-        end)
+        for _, args in pairs(unlockArgs) do
+            pcall(function()
+                if remote:IsA("RemoteFunction") then
+                    remote:InvokeServer(unpack(args))
+                else
+                    remote:FireServer(unpack(args))
+                end
+                unlockedCount = unlockedCount + 1
+            end)
+            task.wait(0.01) -- Small delay between calls
+        end
     end
     
-    -- Unlock items (charms, skins)
+    -- Try all item remotes (charms, skins, camos)
     for _, remote in pairs(categories.item) do
-        pcall(function()
-            if remote:IsA("RemoteFunction") then
-                remote:InvokeServer("all")
-            else
-                remote:FireServer("all")
-            end
-        end)
+        for _, args in pairs(unlockArgs) do
+            pcall(function()
+                if remote:IsA("RemoteFunction") then
+                    remote:InvokeServer(unpack(args))
+                else
+                    remote:FireServer(unpack(args))
+                end
+                unlockedCount = unlockedCount + 1
+            end)
+            task.wait(0.01)
+        end
     end
     
     -- Fire all unlock remotes
     for _, remote in pairs(categories.unlock) do
-        pcall(function()
-            if remote:IsA("RemoteFunction") then
-                remote:InvokeServer()
-            else
-                remote:FireServer(true, "all")
-            end
-        end)
+        for _, args in pairs(unlockArgs) do
+            pcall(function()
+                if remote:IsA("RemoteFunction") then
+                    remote:InvokeServer(unpack(args))
+                else
+                    remote:FireServer(unpack(args))
+                end
+                unlockedCount = unlockedCount + 1
+            end)
+            task.wait(0.01)
+        end
     end
     
-    notify("Unlock All", "Fertig! Waffen, Items, Skins freigeschaltet", 3)
+    -- Also try "other" category remotes that might be weapon related
+    for _, remote in pairs(categories.other) do
+        local name = remote.Name:lower()
+        if name:find("purchase") or name:find("buy") or name:find("equip") or name:find("select") then
+            for _, args in pairs(unlockArgs) do
+                pcall(function()
+                    if remote:IsA("RemoteFunction") then
+                        remote:InvokeServer(unpack(args))
+                    else
+                        remote:FireServer(unpack(args))
+                    end
+                end)
+                task.wait(0.01)
+            end
+        end
+    end
+    
+    notify("Unlock All", "Fertig! " .. unlockedCount .. " Aufrufe ausgeführt", 3)
 end)
 
 UnlockSection:AddButton("Max Level All", function()
@@ -1610,10 +1658,17 @@ local function startAfkFarmLogic()
                             local lookTarget = targetHead and targetHead.Position or targetRoot.Position
                             myRoot.CFrame = CFrame.new(circlePos, lookTarget)
                             
-                            -- Force camera to look DOWN at enemy (steep angle for better aim)
+                            -- Force camera to look DOWN at enemy using multiple methods
+                            -- Method 1: Set Camera CFrame directly
                             local camPos = camera.CFrame.Position
-                            local lookDownPos = Vector3.new(lookTarget.X, lookTarget.Y - 5, lookTarget.Z)
+                            local lookDownPos = Vector3.new(lookTarget.X, lookTarget.Y - 10, lookTarget.Z)
                             camera.CFrame = CFrame.new(camPos, lookDownPos)
+                            
+                            -- Method 2: Simulate mouse movement to look down
+                            local centerX = camera.ViewportSize.X / 2
+                            local centerY = camera.ViewportSize.Y / 2
+                            -- Move mouse to center of screen (looking straight)
+                            VIM:SendMouseMoveEvent(centerX, centerY + 200, game) -- Look down offset
                             
                             -- Hold RIGHT mouse button (for Silent Aim)
                             VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 1, true, game, 1)
