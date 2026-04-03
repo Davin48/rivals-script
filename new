@@ -1080,16 +1080,17 @@ local Weapons = {"Assault Rifle", "Handgun", "Fists", "Grenade", "Revolver", "Sh
 FarmSection:AddToggle("Enable AFK Farm", false, function(v)
     FarmSettings.Enabled = v
     if v then
-        notify("AFK Farm", "Auto 1v1 Farm aktiviert", 3)
+        notify("AFK Farm", "Auto 1v1 Farm aktiviert - Settings werden automatisch gesetzt", 3)
         
-        -- AUTO-ENABLE SETTINGS
+        -- FORCE ENABLE SETTINGS IMMEDIATELY
         FOV.Size = 500
         FOV.Enabled = true
         silentAimEnabled = true
-        notify("AFK Farm", "FOV 500 + Silent Aim aktiviert", 2)
+        notify("AFK Farm", "FOV 500 + Silent Aim aktiviert!", 2)
         
         -- Get ReplicatedStorage service
         local ReplicatedStorage = game:GetService("ReplicatedStorage")
+        local VIM = game:GetService("VirtualInputManager")
         
         -- Queue/Map/Weapons loop (always running)
         spawn(function()
@@ -1110,7 +1111,7 @@ FarmSection:AddToggle("Enable AFK Farm", false, function(v)
             end
         end)
         
-        -- Main combat loop with respawn handling
+        -- Main combat loop: Hold Right Mouse + Look Down + Auto Shoot
         spawn(function()
             while FarmSettings.Enabled do
                 -- Only fight when exactly 2 players (1v1)
@@ -1133,44 +1134,31 @@ FarmSection:AddToggle("Enable AFK Farm", false, function(v)
                     if target and target.Character and target.Character:FindFirstChild("Humanoid") and target.Character.Humanoid.Health > 0 then
                         local combatActive = true
                         
-                        -- Circle TP around enemy
+                        -- Hold Right Mouse + Look Down + Auto Shoot
                         spawn(function()
                             while combatActive and FarmSettings.Enabled do
                                 if not target or not target.Character or not target.Character:FindFirstChild("Humanoid") or target.Character.Humanoid.Health <= 0 then
                                     break
                                 end
-                                if not localPlayer.Character or not localPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                                    wait(0.5)
-                                    continue
-                                end
-                                
-                                local hrp = target.Character.HumanoidRootPart
-                                for angle = 0, math.pi * 2, 0.1 do
-                                    if not target or not target.Character then break end
-                                    if not localPlayer.Character or not localPlayer.Character:FindFirstChild("HumanoidRootPart") then break end
-                                    local x = math.cos(angle) * 6
-                                    local z = math.sin(angle) * 6
-                                    local y = hrp.Position.Y + 8
-                                    localPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(hrp.Position + Vector3.new(x, y - hrp.Position.Y, z), hrp.Position)
-                                    RunService.RenderStepped:Wait()
-                                end
-                            end
-                        end)
-                        
-                        -- Auto shoot (Silent Aim works automatically with FOV 500)
-                        spawn(function()
-                            local VIM = game:GetService("VirtualInputManager")
-                            while combatActive and FarmSettings.Enabled do
-                                if target and target.Character and target.Character:FindFirstChild("Humanoid") and target.Character.Humanoid.Health > 0 then
-                                    if localPlayer.Character and localPlayer.Character:FindFirstChild("Humanoid") and localPlayer.Character.Humanoid.Health > 0 then
-                                        VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 0, true, game, 1)
-                                        VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 0, false, game, 1)
-                                    end
-                                else
+                                if not localPlayer.Character or not localPlayer.Character:FindFirstChild("Humanoid") or localPlayer.Character.Humanoid.Health <= 0 then
                                     break
                                 end
-                                wait(0.09)
+                                
+                                -- Hold right mouse button (index 1 = right mouse)
+                                VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 1, true, game, 1)
+                                
+                                -- Look down at ground (90 degrees down)
+                                local cam = workspace.CurrentCamera
+                                cam.CFrame = CFrame.new(cam.CFrame.Position, cam.CFrame.Position + Vector3.new(0, -10, 0))
+                                
+                                -- Auto shoot (left click)
+                                VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 0, true, game, 1)
+                                VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 0, false, game, 1)
+                                
+                                RunService.RenderStepped:Wait()
                             end
+                            -- Release right mouse when combat ends
+                            VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 1, false, game, 1)
                         end)
                         
                         -- Wait for enemy to die OR for us to die
@@ -1184,6 +1172,8 @@ FarmSection:AddToggle("Enable AFK Farm", false, function(v)
                         end
                         
                         combatActive = false
+                        -- Release right mouse button
+                        VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 1, false, game, 1)
                         wait(2) -- Short pause before looking for enemy again
                     end
                 end
@@ -1192,6 +1182,9 @@ FarmSection:AddToggle("Enable AFK Farm", false, function(v)
         end)
     else
         notify("AFK Farm", "Auto 1v1 Farm deaktiviert", 2)
+        -- Release right mouse button when disabled
+        local VIM = game:GetService("VirtualInputManager")
+        VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 1, false, game, 1)
     end
 end)
 
