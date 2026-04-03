@@ -728,32 +728,41 @@ FovSection:AddSlider("FOV Size", 50, 150, 500, 10, function(v)
 end)
 
 -- ============================================
--- PREMIUM MAGIC BULLET SYSTEM
+-- ULTRA PREMIUM MAGIC BULLET SYSTEM - V2
 -- ============================================
-local MagicBullet = {
+local UltraMagicBullet = {
     Enabled = false,
     Wallbang = true,
-    AutoRedirect = true,
-    HeadshotOnly = true,
-    DamageMultiplier = 1.5
+    HeadshotChance = 100,
+    InstantHit = true,
+    NoRecoil = true,
+    NoSpread = true,
+    AutoFireRate = 0.01,
+    DamageBoost = 2.0,
+    TargetPart = "Head",
+    Connection = nil
 }
 
-local function getClosestEnemyHead()
+local function getUltraTarget()
     local closest = nil
     local shortest = math.huge
+    local camPos = camera.CFrame.Position
     local center = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
     
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= localPlayer and player.Character then
-            local head = player.Character:FindFirstChild("Head")
+            local part = player.Character:FindFirstChild(UltraMagicBullet.TargetPart)
             local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-            if head and humanoid and humanoid.Health > 0 then
-                local pos, visible = worldToScreen(head.Position)
-                if visible or MagicBullet.Wallbang then
-                    local dist = (Vector2.new(pos.X, pos.Y) - center).Magnitude
-                    if dist < shortest then
-                        shortest = dist
-                        closest = head
+            if part and humanoid and humanoid.Health > 0 then
+                local pos, visible = worldToScreen(part.Position)
+                local dist = (Vector2.new(pos.X, pos.Y) - center).Magnitude
+                local worldDist = (part.Position - camPos).Magnitude
+                
+                -- Wallbang allows targeting through walls
+                if (visible or UltraMagicBullet.Wallbang) and dist < 800 then
+                    if worldDist < shortest then
+                        shortest = worldDist
+                        closest = part
                     end
                 end
             end
@@ -762,77 +771,189 @@ local function getClosestEnemyHead()
     return closest
 end
 
--- Magic Bullet Hook
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local originalFireServer = nil
-local originalInvokeServer = nil
-
-local function enableMagicBullet()
-    if not originalFireServer then
-        originalFireServer = ReplicatedStorage.Remotes.Replication.Fighter.Fire.FireServer
-    end
-    if not originalInvokeServer then
-        originalInvokeServer = ReplicatedStorage.Remotes.Replication.Fighter.Fire.InvokeServer
-    end
+-- Find Fire Remote via GC Scanning
+local function findFireRemote()
+    local FireRemote = nil
     
-    -- Hook FireServer
-    ReplicatedStorage.Remotes.Replication.Fighter.Fire.FireServer = function(self, ...)
-        if MagicBullet.Enabled then
-            local target = getClosestEnemyHead()
-            if target then
-                local args = {...}
-                -- Redirect shot to target head
-                if args[1] and typeof(args[1]) == "CFrame" then
-                    args[1] = CFrame.new(args[1].Position, target.Position)
+    -- Method 1: Direct path
+    pcall(function()
+        local RS = game:GetService("ReplicatedStorage")
+        if RS:FindFirstChild("Remotes") then
+            if RS.Remotes:FindFirstChild("Replication") then
+                if RS.Remotes.Replication:FindFirstChild("Fighter") then
+                    if RS.Remotes.Replication.Fighter:FindFirstChild("Fire") then
+                        FireRemote = RS.Remotes.Replication.Fighter.Fire
+                    end
                 end
-                -- Apply damage multiplier
-                if args[3] and typeof(args[3]) == "number" then
-                    args[3] = args[3] * MagicBullet.DamageMultiplier
-                end
-                return originalFireServer(self, unpack(args))
             end
         end
-        return originalFireServer(self, ...)
+    end)
+    
+    -- Method 2: GC Scan
+    if not FireRemote then
+        for _, v in pairs(getgc(true)) do
+            if typeof(v) == "table" then
+                for k, val in pairs(v) do
+                    if k == "FireServer" or k == "fireServer" then
+                        -- Check if this is a RemoteEvent
+                        if typeof(val) == "Instance" and val:IsA("RemoteEvent") then
+                            if val.Name:lower():find("fire") or val.Name:lower():find("shoot") then
+                                FireRemote = val
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+        end
     end
+    
+    -- Method 3: Name scanning
+    if not FireRemote then
+        for _, obj in pairs(game:GetDescendants()) do
+            if obj:IsA("RemoteEvent") then
+                if obj.Name:lower():find("fire") or obj.Name:lower():find("shoot") or 
+                   obj.Name:lower():find("hit") or obj.Name:lower():find("damage") then
+                    FireRemote = obj
+                    break
+                end
+            end
+        end
+    end
+    
+    return FireRemote
 end
 
-local function disableMagicBullet()
-    if originalFireServer then
-        ReplicatedStorage.Remotes.Replication.Fighter.Fire.FireServer = originalFireServer
-    end
-    if originalInvokeServer then
-        ReplicatedStorage.Remotes.Replication.Fighter.Fire.InvokeServer = originalInvokeServer
-    end
-end
+-- Hook and modify weapon behavior
+local weaponHooks = {}
+local originalFunctions = {}
 
--- Magic Bullet Section
-local MagicSection = AimbotTab:CreateSector("Magic Bullet", "left")
-
-MagicSection:AddToggle("Enable Magic Bullet", false, function(v)
-    MagicBullet.Enabled = v
-    if v then
-        enableMagicBullet()
-        notify("Magic Bullet", "Premium Magic Bullet aktiviert!", 3)
+local function enableUltraMagicBullet()
+    notify("Magic Bullet ULTRA", "Suche Remotes...", 2)
+    
+    -- Find fire remote
+    local FireRemote = findFireRemote()
+    if FireRemote then
+        notify("Magic Bullet ULTRA", "Remote gefunden: " .. FireRemote:GetFullName(), 3)
+        
+        -- Hook FireServer
+        if FireRemote and FireRemote.FireServer then
+            originalFunctions[FireRemote] = FireRemote.FireServer
+            
+            FireRemote.FireServer = function(self, ...)
+                if UltraMagicBullet.Enabled and self == FireRemote then
+                    local target = getUltraTarget()
+                    if target then
+                        local args = {...}
+                        
+                        -- Modify hit position to target
+                        if #args >= 1 then
+                            if typeof(args[1]) == "CFrame" then
+                                args[1] = CFrame.new(args[1].Position, target.Position)
+                            elseif typeof(args[1]) == "Vector3" then
+                                args[1] = target.Position
+                            end
+                        end
+                        
+                        -- Add headshot multiplier
+                        if #args >= 3 and typeof(args[3]) == "number" then
+                            args[3] = args[3] * UltraMagicBullet.DamageBoost
+                        end
+                        
+                        return originalFunctions[FireRemote](self, unpack(args))
+                    end
+                end
+                return originalFunctions[FireRemote](self, ...)
+            end
+        end
     else
-        disableMagicBullet()
-        notify("Magic Bullet", "Deaktiviert", 2)
+        notify("Magic Bullet ULTRA", "Remote nicht gefunden - verwende Alternative", 2)
+    end
+    
+    -- Alternative: Raycast manipulation
+    local RS = RunService.RenderStepped:Connect(function()
+        if not UltraMagicBullet.Enabled then return end
+        
+        -- Continuously scan for weapon module
+        for _, gcVal in pairs(getgc(true)) do
+            if typeof(gcVal) == "table" then
+                -- Look for weapon config
+                if rawget(gcVal, "Recoil") and UltraMagicBullet.NoRecoil then
+                    rawset(gcVal, "Recoil", 0)
+                    rawset(gcVal, "RecoilX", 0)
+                    rawset(gcVal, "RecoilY", 0)
+                end
+                if rawget(gcVal, "Spread") and UltraMagicBullet.NoSpread then
+                    rawset(gcVal, "Spread", 0)
+                    rawset(gcVal, "MinSpread", 0)
+                    rawset(gcVal, "MaxSpread", 0)
+                end
+                if rawget(gcVal, "Cooldown") and UltraMagicBullet.InstantHit then
+                    rawset(gcVal, "Cooldown", UltraMagicBullet.AutoFireRate)
+                end
+                if rawget(gcVal, "FireRate") and UltraMagicBullet.InstantHit then
+                    rawset(gcVal, "FireRate", UltraMagicBullet.AutoFireRate)
+                end
+            end
+        end
+    end)
+    
+    weaponHooks.Connection = RS
+    
+    notify("Magic Bullet ULTRA", "ULTRA MODE AKTIVIERT!", 3)
+end
+
+local function disableUltraMagicBullet()
+    if weaponHooks.Connection then
+        weaponHooks.Connection:Disconnect()
+        weaponHooks.Connection = nil
+    end
+    
+    -- Restore original functions
+    for remote, origFunc in pairs(originalFunctions) do
+        if remote and remote.FireServer then
+            remote.FireServer = origFunc
+        end
+    end
+    originalFunctions = {}
+    
+    notify("Magic Bullet ULTRA", "Deaktiviert", 2)
+end
+
+-- ULTRA Magic Bullet Section
+local UltraMagicSection = AimbotTab:CreateSector("ULTRA Magic Bullet", "left")
+
+UltraMagicSection:AddToggle("ENABLE ULTRA", false, function(v)
+    UltraMagicBullet.Enabled = v
+    if v then
+        enableUltraMagicBullet()
+    else
+        disableUltraMagicBullet()
     end
 end)
 
-MagicSection:AddToggle("Wallbang", true, function(v)
-    MagicBullet.Wallbang = v
+UltraMagicSection:AddToggle("Wallbang", true, function(v)
+    UltraMagicBullet.Wallbang = v
 end)
 
-MagicSection:AddToggle("Auto Redirect", true, function(v)
-    MagicBullet.AutoRedirect = v
+UltraMagicSection:AddDropdown("Target Part", {"Head", "HumanoidRootPart", "Torso"}, "Head", false, function(v)
+    UltraMagicBullet.TargetPart = v
 end)
 
-MagicSection:AddToggle("Headshot Only", true, function(v)
-    MagicBullet.HeadshotOnly = v
+UltraMagicSection:AddSlider("Damage Boost", 1, 2, 10, 0.5, function(v)
+    UltraMagicBullet.DamageBoost = v
 end)
 
-MagicSection:AddSlider("Damage Multiplier", 1, 1.5, 5, 0.5, function(v)
-    MagicBullet.DamageMultiplier = v
+UltraMagicSection:AddToggle("No Recoil", true, function(v)
+    UltraMagicBullet.NoRecoil = v
+end)
+
+UltraMagicSection:AddToggle("No Spread", true, function(v)
+    UltraMagicBullet.NoSpread = v
+end)
+
+UltraMagicSection:AddToggle("Instant Hit", true, function(v)
+    UltraMagicBullet.InstantHit = v
 end)
 
 -- ESP Tab
@@ -1284,12 +1405,21 @@ local function startAfkFarmLogic()
                 
                 -- If both alive, start combat
                 if bothAlive and FarmSettings.Enabled then
-                    notify("AFK Farm", "Kampf gestartet! Fliege über Gegner...", 2)
+                    notify("AFK Farm", "Kampf gestartet! Aktiviere FOV 500 + Silent Aim...", 2)
                     local combatActive = true
-                    local angle = 0
                     
-                    -- Circle TP + Auto Shoot loop
+                    -- FORCE RE-ENABLE FOV 500 + Silent Aim at combat start
+                    FOV.Size = 500
+                    FOV.Enabled = true
+                    silentAimEnabled = true
+                    selectedSilentAimKey = "RightMouseButton" -- Ensure right mouse is the aim key
+                    saIsAimKeyDown = true -- Tell silent aim system that aim key is held
+                    saAutoClick() -- Start auto-clicking
+                    notify("AFK Farm", "FOV 500 + Silent Aim READY!", 2)
+                    
+                    -- Circle TP + Hold Right Mouse loop
                     spawn(function()
+                        local angle = 0
                         while combatActive and FarmSettings.Enabled do
                             -- Check both still alive
                             local myChar = localPlayer.Character
@@ -1306,19 +1436,30 @@ local function startAfkFarmLogic()
                                 break
                             end
                             
-                            -- Circle TP above enemy (radius 6, height 8)
+                            -- Circle TP above enemy (radius 5, height 12 - HIGHER)
                             angle = angle + 0.1
-                            local x = math.cos(angle) * 6
-                            local z = math.sin(angle) * 6
-                            local y = targetRoot.Position.Y + 8
-                            local circlePos = targetRoot.Position + Vector3.new(x, 8, z)
+                            local x = math.cos(angle) * 5
+                            local z = math.sin(angle) * 5
+                            local circlePos = targetRoot.Position + Vector3.new(x, 12, z)
+                            
+                            -- Look DOWN at enemy
                             myRoot.CFrame = CFrame.new(circlePos, targetRoot.Position)
                             
-                            -- Auto shoot
-                            VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 0, true, game, 1)
-                            VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 0, false, game, 1)
+                            -- Hold RIGHT mouse button (for Silent Aim)
+                            VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 1, true, game, 1)
+                            
+                            -- Let Silent Aim do the shooting - NO left click
+                            -- Silent Aim will auto-shoot when right mouse is held
                             
                             RunService.RenderStepped:Wait()
+                        end
+                        
+                        -- Release right mouse button when combat ends
+                        VIM:SendMouseButtonEvent(camera.ViewportSize.X/2, camera.ViewportSize.Y/2, 1, false, game, 1)
+                        saIsAimKeyDown = false
+                        if saAutoClickConnection then
+                            saAutoClickConnection:Disconnect()
+                            saAutoClickConnection = nil
                         end
                     end)
                     
