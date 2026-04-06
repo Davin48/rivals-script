@@ -1,3 +1,4 @@
+
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
@@ -69,7 +70,7 @@ local WrapList = {
 -- ═══════════════════════════════════════════════
 -- SAVE / LOAD CONFIG
 -- ═══════════════════════════════════════════════
-local SAVE_FILE = "AnihaSkinConfig.json"
+local SAVE_FILE = "air.waveSkinConfig.json"
 
 local function SaveConfig()
     local success, err = pcall(function()
@@ -117,8 +118,8 @@ end
 
 -- Load saved config on startup
 LoadConfig()
-print("[+] Initializing Aniha Skin Changer v2.2 (HEURISTIC SCAN Edition)...")
-_G.AnihaVersion = "2.2-GC"
+print("[+] Initializing air.wave Skin Changer v2.2 (HEURISTIC SCAN Edition)...")
+_G.air.waveVersion = "2.2-GC"
 
 -- ═══════════════════════════════════════════════
 -- COSMETIC HOOKS & ROBUST INITIALIZATION
@@ -287,7 +288,7 @@ local function ApplyAllSkins()
             pcall(function() CosmeticLibrary.Equip(weapon, "Skin", info.Skin) end)
         end
     end
-    print("[+] Aniha: Skin state synced for " .. player.Name)
+    print("[+] air.wave: Skin state synced for " .. player.Name)
 end
 
 -- ═══════════════════════════════════════════════
@@ -295,7 +296,7 @@ end
 -- ═══════════════════════════════════════════════
 local ScreenGui = Instance.new("ScreenGui", player.PlayerGui)
 ScreenGui.ResetOnSpawn = false
-ScreenGui.Name = "AnihaSkinChanger"
+ScreenGui.Name = "air.waveSkinChanger"
 
 local Main = Instance.new("Frame", ScreenGui)
 Main.Size = UDim2.new(0, 950, 0, 660)
@@ -307,7 +308,7 @@ Main.Active = false
 local Title = Instance.new("TextLabel", Main)
 Title.Size = UDim2.new(1, 0, 0, 50)
 Title.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
-Title.Text = "Aniha Skin Changer  •  [ K ] Toggle"
+Title.Text = "air.wave Skin Changer  •  [ K ] Toggle"
 Title.TextColor3 = Color3.fromRGB(255, 80, 80)
 Title.Font = Enum.Font.GothamBlack
 Title.TextSize = 22
@@ -378,7 +379,7 @@ local StatusLabel = Instance.new("TextLabel", Toolbar)
 StatusLabel.Size = UDim2.new(1, -310, 1, 0)
 StatusLabel.Position = UDim2.new(0, 15, 0, 0)
 StatusLabel.BackgroundTransparency = 1
-StatusLabel.Text = "Ready  •  Config: AnihaSkinConfig.json"
+StatusLabel.Text = "Ready  •  Config: air.waveSkinConfig.json"
 StatusLabel.TextColor3 = Color3.fromRGB(140, 140, 160)
 StatusLabel.Font = Enum.Font.Gotham
 StatusLabel.TextSize = 13
@@ -406,7 +407,7 @@ local function FlashStatus(msg, color)
     StatusLabel.Text = msg
     StatusLabel.TextColor3 = color or Color3.fromRGB(140, 200, 140)
     task.delay(3, function()
-        StatusLabel.Text = "Ready  •  Config: AnihaSkinConfig.json"
+        StatusLabel.Text = "Ready  •  Config: air.waveSkinConfig.json"
         StatusLabel.TextColor3 = Color3.fromRGB(140, 140, 160)
     end)
 end
@@ -579,5 +580,5 @@ UserInputService.InputBegan:Connect(function(i, g)
     end
 end)
 
-print("[+] Aniha Skin Changer loaded. Press K to toggle. Drag via title bar.")
+print("[+] air.wave Skin Changer loaded. Press K to toggle. Drag via title bar.")
 end)
